@@ -1,0 +1,14 @@
+Dockerfile
+README.md
+*.pyc
+*.pyo
+*.pyd
+__pycache__
+.pytest_cache
+#.env
+venv
+env.yaml
+deploy.txt
+development_docker.txt
+development.txt
+test.txt

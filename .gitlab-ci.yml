@@ -1,0 +1,73 @@
+image: google/cloud-sdk
+
+stages:
+  - build
+  - deploy
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  IMAGE_NAME: gcr.io/${GCP_PROJECT_ID}/${CI_PROJECT_NAME}
+  IMAGE_TAG: ${CI_COMMIT_SHORT_SHA}
+
+.gcloud:
+  before_script:
+    - gcloud auth activate-service-account --key-file ${GCP_SERVICE_KEY}
+    - gcloud auth configure-docker
+    - gcloud config set project ${GCP_PROJECT_ID}
+    - gcloud config set run/region ${GCP_REGION}
+
+.cloud-run-job:
+  variables:
+    JOB_NAME: is-job-${CI_PROJECT_NAME}-${CI_ENVIRONMENT_NAME}
+  script:
+    - if ! gcloud beta run jobs describe ${JOB_NAME}; then
+        gcloud beta run jobs create ${JOB_NAME} --image ${IMAGE_NAME}:${IMAGE_TAG};
+      else
+        gcloud beta run jobs update ${JOB_NAME} --image ${IMAGE_NAME}:${IMAGE_TAG};
+      fi
+
+build:
+  stage: build
+  services:
+    - docker:20.10.16-dind
+  extends:
+    - .gcloud
+  script:
+    - docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+    - docker push ${IMAGE_NAME}:${IMAGE_TAG}
+  only:
+    - dev
+    - test
+    - master
+
+deploy-dev:
+  stage: deploy
+  extends:
+    - .gcloud
+    - .cloud-run-job
+  environment:
+    name: dev
+  only:
+    - dev
+
+deploy-test:
+  stage: deploy
+  extends:
+    - .gcloud
+    - .cloud-run-job
+  environment:
+    name: test
+  only:
+    - test
+
+deploy-master:
+  stage: deploy
+  extends:
+    - .gcloud
+    - .cloud-run-job
+  environment:
+    name: master
+  when: manual
+  only:
+    - master

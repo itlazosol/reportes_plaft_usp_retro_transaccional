@@ -1,0 +1,16 @@
+# Crear el entorno virtual
+virtualenv -p python3 venv
+
+# Entrar al entorno virtual
+.\venv\Scripts\activate
+
+# Instalar todos los paquetes
+pip install -r requirements.txt
+
+# Ejecutar Proyecto
+python main.py
+
+
+#Generar y subir imagen
+gcloud config set project is-staging-408920
+gcloud builds submit --tag gcr.io/is-staging-408920/etl-sme-actualizacion-envio-acsele-api
