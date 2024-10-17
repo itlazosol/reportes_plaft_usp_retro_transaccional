@@ -1,9 +1,4 @@
 from ..repository.reportes_plaft_usp_retro_repository import (
-    obtener_polizas_alloy,
-    obtener_polizas_sme,
-    insertar_polizas_temporal,
-    limpiar_temporal,
-    update_impmas_desde_temp,
     registrar_log_interno,
     update_actividad_economica_transaccional,
     usp_retro_det_activo,
@@ -13,7 +8,13 @@ from ..repository.reportes_plaft_usp_retro_repository import (
     usp_retro_det_poliza_matriz,
     usp_retro_det_calc_acti_econo,
     usp_retro_det_ini_valores,
-    usp_retro_desactivar_aseg_previ
+    usp_retro_desactivar_aseg_previ,
+    usp_retro_det_val_tipo_y_num_doc,
+    usp_retro_det_val_nacionalidad,
+    usp_retro_det_val_departamento,
+    usp_retro_det_val_prod_riesgo,
+    usp_retro_det_val_tipo_persona,
+    usp_retro_det_val_regimen
 )
 import pandas as pd
 from ..utils.logger import logger
@@ -73,45 +74,38 @@ def reportes_plaft_usp_retro_acsele_service():
 
     registrar_log_interno("8. DESACTIVAR ASEGURDADOS PREVICIONALES - FIN")
 
+    registrar_log_interno("9. EVALUAR TIPO Y NUMERO DE DOCUMENTO - INICIO")
 
-def actualizacion_envio_acsele_service():
-    logger.info("actualizacion_envio_acsele - inicio")
+    usp_retro_det_val_tipo_y_num_doc()
 
-    logger.info("actualizacion_envio_acsele - Consultando polizas Acsele")
-    dfAlloy = obtener_polizas_alloy()
+    registrar_log_interno("9. EVALUAR TIPO Y NUMERO DE DOCUMENTO - FIN")
 
-    logger.info("actualizacion_envio_acsele - Consultando polizas SME")
-    dfSme = obtener_polizas_sme()
+    registrar_log_interno("10. EVALUAR NACIONALIDAD - INICIO")
 
-    logger.info("actualizacion_envio_acsele - Cruzando polizas Acsele x SME")
-    merged_df = pd.merge(
-        dfAlloy,
-        dfSme[["idproducto", "idpoliza", "idoperacion", "evento", "idenviosme"]],
-        on=["idproducto", "idpoliza", "idoperacion", "evento"],
-        how="inner",
-    )
-    merged_df = merged_df.rename(columns={"idenviosme_y": "idenviosme"})
-    merged_df = merged_df.drop("idenviosme_x", axis=1)
-    merged_df = merged_df.drop_duplicates(
-        subset=["idproducto", "evento", "idpoliza", "idoperacion"]
-    )
+    usp_retro_det_val_nacionalidad()
 
-    logger.info("actualizacion_envio_acsele - Limpiando tablas temporales")
-    limpiar_temporal("interseguror.impmas_temp_envio")
+    registrar_log_interno("10. EVALUAR NACIONALIDAD - FIN")
 
-    logger.info("actualizacion_envio_acsele - Insertando polizas en temporal")
-    insertar_polizas_temporal(merged_df)
+    registrar_log_interno("11. EVALUAR DEPARTAMENTO - INICIO")
 
-    logger.info(
-        "actualizacion_envio_acsele - Actualizando estado sme de las polizas Acsele"
-    )
-    updates = update_impmas_desde_temp()
+    usp_retro_det_val_departamento()
 
-    response = {
-        "polizas alloy": {"count": len(dfAlloy.to_dict(orient="records"))},
-        "polizas sme": {"count": len(dfSme.to_dict(orient="records"))},
-        "polizas mergeadas": {"count": len(merged_df.to_dict(orient="records"))},
-        "polizas actualizadas": {"count": updates},
-    }
-    logger.info("actualizacion_envio_acsele - fin")
-    return response
+    registrar_log_interno("11. EVALUAR DEPARTAMENTO - FIN")
+
+    registrar_log_interno("12. EVALUAR PRODUCTO - INICIO")
+
+    usp_retro_det_val_prod_riesgo()
+
+    registrar_log_interno("12. EVALUAR PRODUCTO - FIN")
+
+    registrar_log_interno("13. EVALUAR PERSONA NATURAL - INICIO")
+
+    usp_retro_det_val_tipo_persona()
+
+    registrar_log_interno("13. EVALUAR PERSONA NATURAL - FIN")
+
+    registrar_log_interno("14. EVALUAR REGIMEN - INICIO")
+
+    usp_retro_det_val_regimen()
+
+    registrar_log_interno("14. EVALUAR REGIMEN - FIN")

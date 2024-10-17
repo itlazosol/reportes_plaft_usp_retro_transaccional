@@ -132,6 +132,31 @@ def usp_limpiar_indices():
     logger.info(f'usp_limpiar_indices - fin') 
 
 
+def usp_crear_indices():
+
+    logger.info('Ejecutando función para crear índices en interseguror.plaft_transaccional')
+    
+    # Lista de scripts que representan las consultas para crear índices
+    scripts = [
+        'create index idx_plf_trans_01 on interseguror.plaft_transaccional (departamento_eval)',
+        'create index idx_plf_trans_02 on interseguror.plaft_transaccional (numero_documento_EVAL)',
+        'create index idx_plf_trans_03 on interseguror.plaft_transaccional (id_departamento)',
+        'create index idx_plf_trans_04 on interseguror.plaft_transaccional (cod_tipo_documento_eval)',
+        'create index idx_plf_trans_05 on interseguror.plaft_transaccional (cod_tipo_documento_eval, numero_documento_eval)'
+    ]
+    
+    # Ejecutar cada script usando el método execute_query_no_results
+    for script in scripts:
+        try:
+            logger.info(f'Ejecutando script: {script}')
+            execute_query_no_results(script, 'pg')
+        except Exception as e:
+            logger.error(f'Error al ejecutar script: {script}, Error: {str(e)}')
+            raise e
+
+    logger.info('Todos los índices se han creado correctamente.')
+
+
 def update_actividad_economica_transaccional():
     logger.info(f'update_actividad_economica_transaccional - inicio') 
 
@@ -1413,3 +1438,1145 @@ def usp_retro_desactivar_aseg_previ():
     logger.info(f'usp_retro_desactivar_aseg_previ - fin') 
 
 
+def usp_retro_det_val_tipo_y_num_doc():
+
+    logger.info(f'usp_retro_det_val_tipo_y_num_doc - inicio') 
+
+    try:
+        query_insert_1 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-crear-inicices-inicio', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_1, 'pg')   
+
+        usp_limpiar_indices()
+
+        usp_crear_indices()
+
+        query_insert_2 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-crear-inicices-fin', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_2, 'pg')
+
+        update_transaccional_query_1 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            SET    COD_TIPO_DOCUMENTO_EVAL = 'DNI',REGLAS = CONCAT(T.REGLAS,'-','R002')
+            WHERE  LENGTH(NULLIF(TRIM(TRANSLATE(T.NUMERO_DOCUMENTO_EVAL,' +-.0123456789',' ')),
+            '')) is null
+            AND T.COD_TIPO_DOCUMENTO_EVAL = '-1'
+            AND length(T.NUMERO_DOCUMENTO_EVAL) = 8;
+        """
+        execute_query_no_results(update_transaccional_query_1, 'pg')
+
+        update_transaccional_query_2 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            SET    COD_TIPO_DOCUMENTO_EVAL = 'DNI',REGLAS = CONCAT(T.REGLAS,'-','R002')
+            WHERE  LENGTH(NULLIF(TRIM(TRANSLATE(T.NUMERO_DOCUMENTO_EVAL,' +-.0123456789',' ')),
+            '')) is null
+            AND T.COD_TIPO_DOCUMENTO_EVAL = '-1'
+            AND length(T.NUMERO_DOCUMENTO_EVAL) = 8;
+        """
+        execute_query_no_results(update_transaccional_query_2, 'pg')
+
+        query_insert_3 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'tipo de documento', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_3, 'pg')
+
+        update_transaccional_query_3 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            SET    NUMERO_DOCUMENTO_EVAL =  SWF_substr(CONCAT('000',T.NUMERO_DOCUMENTO_EVAL),-8),REGLAS = CONCAT(T.REGLAS,'-','R003')
+            WHERE  T.COD_TIPO_DOCUMENTO_EVAL  = 'DNI'
+            AND LENGTH(T.NUMERO_DOCUMENTO_EVAL) = 7
+            AND LENGTH(NULLIF(TRIM(TRANSLATE(NUMERO_DOCUMENTO_EVAL,' +-.0123456789',' ')),'')) is null;
+        """
+        execute_query_no_results(update_transaccional_query_3, 'pg')
+
+        update_transaccional_query_4 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            SET    COD_TIPO_DOCUMENTO_EVAL = 'DNI',REGLAS = CONCAT(T.REGLAS,'-','R004')
+            WHERE  T.COD_TIPO_DOCUMENTO_EVAL = 'LE'
+            AND LENGTH(T.NUMERO_DOCUMENTO_EVAL) = 8
+            AND LENGTH(NULLIF(TRIM(TRANSLATE(NUMERO_DOCUMENTO_EVAL,' +-.0123456789',' ')),'')) is null;
+        """
+        execute_query_no_results(update_transaccional_query_4, 'pg')
+
+        update_transaccional_query_5 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T SET
+            COD_TIPO_DOCUMENTO_EVAL = 'DNI',REGLAS = CONCAT(T.REGLAS,'-','R020')
+            WHERE  UPPER(T.GLOSA_PRODUCTO) IN('DESGRAVAMENTARJETAS','DESGRAVAMENPERSONAL')
+            AND T.COD_TIPO_DOCUMENTO_EVAL = '-1';
+        """
+        execute_query_no_results(update_transaccional_query_5, 'pg')
+
+        query_insert_4 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'tipo de documento2', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_4, 'pg')
+
+        update_transaccional_query_6 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set COD_TIPO_DOCUMENTO_EVAL = 'DNI',REGLAS = CONCAT(T.REGLAS,'-','R005')
+            FROM(SELECT DISTINCT TT.NUMERO_DOCUMENTO_EVAL
+            FROM(SELECT TU.NUMERO_DOCUMENTO_EVAL,
+                                    COUNT(DISTINCT TU.COD_TIPO_DOCUMENTO_EVAL)
+                FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL TU
+                WHERE TU.NUMERO_DOCUMENTO_EVAL <> '0'
+                GROUP BY TU.NUMERO_DOCUMENTO_EVAL
+                HAVING COUNT(DISTINCT TU.COD_TIPO_DOCUMENTO_EVAL) > 1) TT
+            INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL TP ON TT.NUMERO_DOCUMENTO_EVAL = TP.NUMERO_DOCUMENTO_EVAL
+            WHERE TP.COD_TIPO_DOCUMENTO_EVAL = 'DNI'
+            AND TT.NUMERO_DOCUMENTO_EVAL <> '0'
+            AND LENGTH(TT.NUMERO_DOCUMENTO_EVAL) = 8) B
+            where B.NUMERO_DOCUMENTO_EVAL = T.NUMERO_DOCUMENTO_EVAL;
+        """
+        execute_query_no_results(update_transaccional_query_6, 'pg')
+
+        query_insert_5 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'tipo de documento3', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_5, 'pg')
+
+        update_transaccional_query_7 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set COD_TIPO_DOCUMENTO_EVAL = UNI.COD_TIPO_DOCUMENTO_EVAL,REGLAS = CONCAT(T.REGLAS,'-','R006')
+            FROM(SELECT DISTINCT DUPLI.NUMERO_DOCUMENTO_EVAL, TD.COD_TIPO_DOCUMENTO_EVAL
+            FROM(SELECT T.NUMERO_DOCUMENTO_EVAL, COUNT(DISTINCT T.COD_TIPO_DOCUMENTO_EVAL)
+                FROM(SELECT DISTINCT T.NUMERO_DOCUMENTO_EVAL
+                    FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL T
+                    WHERE  T.COD_TIPO_DOCUMENTO_EVAL  = '-1'
+                    AND T.NUMERO_DOCUMENTO_EVAL <> '0') TT
+                LEFT JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL T
+                ON TT.NUMERO_DOCUMENTO_EVAL = T.NUMERO_DOCUMENTO_EVAL
+                WHERE T.COD_TIPO_DOCUMENTO_EVAL <> '-1'
+                GROUP BY T.NUMERO_DOCUMENTO_EVAL
+                HAVING COUNT(DISTINCT T.COD_TIPO_DOCUMENTO_EVAL) = 1) DUPLI
+            INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL TD ON DUPLI.NUMERO_DOCUMENTO_EVAL = TD.NUMERO_DOCUMENTO_EVAL
+            WHERE TD.COD_TIPO_DOCUMENTO_EVAL <> '-1') UNI
+            where T.NUMERO_DOCUMENTO_EVAL = UNI.NUMERO_DOCUMENTO_EVAL;
+        """
+        execute_query_no_results(update_transaccional_query_7, 'pg')
+
+        query_insert_6 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'tipo de documento4', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_6, 'pg')
+
+
+        # Actualización final con regla R007 y actualización basada en cliente con múltiples tipos de documento
+        query = """
+        SELECT DISTINCT T3.NUMERO_DOCUMENTO_EVAL, T3.COD_TIPO_DOCUMENTO_EVAL
+        FROM INTERSEGUROR.PLAFT_TRANSACCIONAL T3
+        INNER JOIN (
+            SELECT DISTINCT T1.NUMERO_DOCUMENTO_EVAL, MAX(T1.FEC_INICIO_VIGENCIA) AS FEC_INICIO_VIGENCIA
+            FROM INTERSEGUROR.PLAFT_TRANSACCIONAL T1
+            INNER JOIN (
+                SELECT NUMERO_DOCUMENTO_EVAL, COUNT(COD_TIPO_DOCUMENTO_EVAL) AS CANTIDAD
+                FROM (
+                    SELECT DISTINCT NUMERO_DOCUMENTO_EVAL, COD_TIPO_DOCUMENTO_EVAL
+                    FROM INTERSEGUROR.PLAFT_TRANSACCIONAL
+                    WHERE NUMERO_DOCUMENTO_EVAL <> '0'
+                ) AS TABLA
+                GROUP BY NUMERO_DOCUMENTO_EVAL
+                HAVING COUNT(COD_TIPO_DOCUMENTO_EVAL) > 1
+            ) T2 ON T2.NUMERO_DOCUMENTO_EVAL = T1.NUMERO_DOCUMENTO_EVAL
+            WHERE T1.NUMERO_DOCUMENTO_EVAL <> '0'
+            AND T1.COD_TIPO_DOCUMENTO_EVAL <> '-1'
+            GROUP BY T1.NUMERO_DOCUMENTO_EVAL
+        ) T4 ON T4.NUMERO_DOCUMENTO_EVAL = T3.NUMERO_DOCUMENTO_EVAL
+        AND T4.FEC_INICIO_VIGENCIA = T3.FEC_INICIO_VIGENCIA
+        """
+
+        # Obtener resultados
+        items = execute_query_with_results(query, 'pg')
+
+        # Bucle para actualizar con los resultados del SELECT
+        for item in items:
+            execute_query_no_results(
+                f"""UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL
+                    SET COD_TIPO_DOCUMENTO_EVAL = '{item[1]}', REGLAS = CONCAT(REGLAS, '-', 'R007')
+                    WHERE NUMERO_DOCUMENTO_EVAL = '{item[0]}'""", 
+                'pg'
+            )
+
+        update_transaccional_query_8 = f"""
+            update INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set    COD_TIPO_DOCUMENTO_EVAL = 'DNI'
+            where  T.NUMERO_DOCUMENTO_EVAL = '25575911';
+        """
+        execute_query_no_results(update_transaccional_query_8, 'pg')
+
+
+    except Exception as e:
+        logger.error(f"Error en usp_retro_det_val_tipo_y_num_doc: {str(e)}")
+        raise
+
+    logger.info(f'usp_retro_det_val_tipo_y_num_doc - fin') 
+
+
+
+def usp_retro_det_val_nacionalidad():
+
+    logger.info(f'usp_retro_det_val_nacionalidad - inicio') 
+
+    try:
+        query_check_table = """
+            SELECT COUNT(1) 
+            FROM information_schema.tables 
+            WHERE table_schema = 'interseguror' 
+            AND table_name = 'plaft_transaccional_tmp';
+        """
+        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
+
+        logger.info(f'Imprimiendo cantidad de registros check table {V_CANT_REG}') 
+
+        if V_CANT_REG and V_CANT_REG[0][0] > 0:
+            query_drop_table = "DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
+            execute_query_no_results(query_drop_table, 'pg')
+
+        query_insert_1 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-indices-inicio', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_1, 'pg')   
+
+        usp_limpiar_indices()
+
+        query_insert_2 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-indices-fin', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_2, 'pg')   
+
+        query_insert_3 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'PASO_01', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_3, 'pg')
+
+        query_create_table = """
+            CREATE TABLE interseguror.plaft_transaccional_tmp 
+            AS SELECT
+                id_rep_general               ,
+                numero_poliza                ,
+                linea_negocio                ,
+                cod_moneda                   ,
+                monto_prima                  ,
+                cod_frecuencia_pago          ,
+                monto_prima_total            ,
+                nombre_razon_social          ,
+                ape_paterno                  ,
+                ape_materno                  ,
+                T.COD_TIPO_DOCUMENTO           ,
+                numero_documento             ,
+                tipo_cliente                 ,
+                nacionalidad                 ,
+                tipo_persona                 ,
+                cod_ramo                     ,
+                cod_subramo                  ,
+                cod_producto                 ,
+                cod_producto_sbs             ,
+                cod_actividad_economica      ,
+                actividad_economica          ,
+                id_regimen                   ,
+                fec_emision_poliza           ,
+                fec_inicio_vigencia          ,
+                fec_fin_vigencia             ,
+                origen                       ,
+                departamento                 ,
+                CASE WHEN D.TIPO = 1 THEN 'PERUANO'
+                    WHEN D.TIPO = 2 THEN 'EXTRANJERO'
+                    WHEN D.TIPO <> 2 AND UPPER(T.GLOSA_PRODUCTO) IN('DESGRAVAMENTARJETAS','DESGRAVAMENPERSONAL') THEN 'PERUANO'
+                    WHEN D.TIPO <> 2 AND NPERU.ID_NACIONALIDAD IS NOT NULL  THEN 'PERUANO'
+                    WHEN D.TIPO NOT IN(1,2) AND NDESCO.ID_NACIONALIDAD IS NOT NULL  THEN 'DESCONOCIDA'
+                    ELSE  'DESCONOCIDA'
+                    END AS NACIONALIDAD_EVAL            ,
+                departamento_eval            ,
+                id_departamento              ,
+                glosa_producto               ,
+                id_riesgo_sbs                ,
+                id_producto_key              ,
+                fecha_nacimiento             ,
+                edad_actuarial               ,
+                periodo_pago                 ,
+                monto_prima_recaudada        ,
+                id_actividad_economica_eval  ,
+                monto_prima_total_soles      ,
+                cod_tipo_documento_eval      ,
+                numero_documento_eval        ,
+                observacion                  ,
+                reglas                       ,
+                fecha_creacion               ,
+                fecha_modificacion           ,
+                existe_en_plaft                ,
+                activo                       ,
+                nombre_razon_social_eval     ,
+                ape_paterno_eval             ,
+                ape_materno_eval             ,
+                cod_actividad_economica_eval ,
+                id_regimen_eval              ,
+                numero_poliza_matriz_eval    ,
+                archivo_excel_origen         ,
+                estado_poliza
+                FROM PLAFT_TRANSACCIONAL T
+                LEFT JOIN  PLAFT_D_TIPO_DOCUMENTO D ON  coalesce(T.COD_TIPO_DOCUMENTO_EVAL,'-1') = D.COD_TIPO_DOCUMENTO
+                LEFT JOIN PLAFT_D_NACIONALIDAD NPERU ON (coalesce(T.NACIONALIDAD_EVAL,'-1') = NPERU.NACIONALIDAD_ORIGEN  AND NPERU.ID_NACIONALIDAD_FINAL = 1)
+                LEFT JOIN PLAFT_D_NACIONALIDAD NDESCO ON (coalesce(T.NACIONALIDAD_EVAL,'-') = NDESCO.NACIONALIDAD_ORIGEN  AND NDESCO.ID_NACIONALIDAD_FINAL = -1);
+        """
+        execute_query_no_results(query_create_table, 'pg')
+
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional;"
+        execute_query_no_results(query_truncate_table, 'pg')
+        
+        query_insert_data = """
+            INSERT INTO interseguror.plaft_transaccional
+            SELECT * FROM interseguror.plaft_transaccional_tmp;
+        """
+        execute_query_no_results(query_insert_data, 'pg')
+
+        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
+        if V_CANT_REG and V_CANT_REG[0][0] > 0:
+            query_drop_table = "DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
+            execute_query_no_results(query_drop_table, 'pg')
+
+    except Exception as e:
+        logger.error(f"Error en usp_retro_det_val_nacionalidad: {str(e)}")
+        raise
+
+    logger.info(f'usp_retro_det_val_nacionalidad - fin') 
+
+
+def usp_retro_det_val_departamento():
+
+    logger.info(f'usp_retro_det_val_departamento - inicio') 
+    
+    try:
+        table_names = [
+            'plaft_transaccional_tmp',
+            'tmp_departamento_unico_01',
+            'tmp_departamento_unico_02',
+            'tmp_departamento_unico_03',
+            'tmp_plaft_polizas_departamento',
+            'tmp_plaft_polizas_departamento_unico',
+            'tmp_plaft_polizas_departamento_unico_upd',
+            'tmp_plaft_polizas_dep_01',
+            'tmp_plaft_polizas_dep_unico_01',
+            'tmp_plaft_polizas_dep_unico_upd_01',
+            'tmp_plaft_clientes_sin_depa',
+            'tmp_plaft_num_polizas_sin_depa',
+            'tmp_plaft_num_polizas_upd_depa',
+            'tmp_plaft_clientes_sin_depa_01',
+            'plaft_tmp_vehi_sin_depa',
+            'tmp_plaft_polizas_dep_10',
+            'tmp_plaft_polizas_dep_unico_10',
+            'tmp_plaft_polizas_dep_unico_upd_10'
+        ]
+    
+        schema = 'interseguror'
+    
+        for table_name in table_names:
+            logger.info(f"Verificando existencia de la tabla: {schema}.{table_name}")
+            
+            query_check_table = f"""
+                SELECT COUNT(1) 
+                FROM information_schema.tables 
+                WHERE table_schema = '{schema}' 
+                AND table_name = '{table_name}';
+            """
+            
+            V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
+            
+            if V_CANT_REG and V_CANT_REG[0][0] > 0:
+                logger.info(f"La tabla {schema}.{table_name} existe. Procediendo a eliminarlo.")
+
+                query_drop_table = f"DROP TABLE IF EXISTS {schema}.{table_name} CASCADE;"
+                
+                execute_query_no_results(query_drop_table, 'pg')
+                
+                logger.info(f"Tabla {schema}.{table_name} eliminada exitosamente.")
+            else:
+                logger.info(f"La tabla {schema}.{table_name} no existe. No se requiere eliminación.")
+
+
+        query_insert_1 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-inicices-inicio', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_1, 'pg')   
+
+        usp_limpiar_indices()
+
+        query_insert_2 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-inicices-fin', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_2, 'pg') 
+
+        query_create_table_1 = """
+            CREATE TABLE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP
+            AS
+            SELECT
+            ID_REP_GENERAL               ,
+            NUMERO_POLIZA                ,
+            LINEA_NEGOCIO                ,
+            COD_MONEDA                   ,
+            MONTO_PRIMA                  ,
+            COD_FRECUENCIA_PAGO          ,
+            MONTO_PRIMA_TOTAL            ,
+            NOMBRE_RAZON_SOCIAL          ,
+            APE_PATERNO                  ,
+            APE_MATERNO                  ,
+            T.COD_TIPO_DOCUMENTO           ,
+            NUMERO_DOCUMENTO             ,
+            TIPO_CLIENTE                 ,
+            NACIONALIDAD                 ,
+            TIPO_PERSONA                 ,
+            COD_RAMO                     ,
+            COD_SUBRAMO                  ,
+            COD_PRODUCTO                 ,
+            COD_PRODUCTO_SBS             ,
+            COD_ACTIVIDAD_ECONOMICA      ,
+            ACTIVIDAD_ECONOMICA          ,
+            ID_REGIMEN                   ,
+            FEC_EMISION_POLIZA           ,
+            FEC_INICIO_VIGENCIA          ,
+            FEC_FIN_VIGENCIA             ,
+            ORIGEN                       ,
+            DEPARTAMENTO                 ,
+            NACIONALIDAD_EVAL            ,
+            CASE WHEN UPPER(T.GLOSA_PRODUCTO) IN('DESGRAVAMENTARJETAS','DESGRAVAMENPERSONAL') THEN 'LIMA'
+                WHEN T.ORIGEN = 'DIGITAL' THEN 'LIMA'
+                WHEN T.DEPARTAMENTO_EVAL = 'PROV. CONST. DEL CALLAO' THEN 'CALLAO'
+                WHEN  coalesce(T.DEPARTAMENTO_EVAL,'-') IN('PERU','VARIOS','-','.')   THEN 'NINGUNO'
+                ELSE DEPARTAMENTO_EVAL END AS DEPARTAMENTO_EVAL           ,
+            ID_DEPARTAMENTO              ,
+            GLOSA_PRODUCTO               ,
+            ID_RIESGO_SBS                ,
+            ID_PRODUCTO_KEY              ,
+            FECHA_NACIMIENTO             ,
+            EDAD_ACTUARIAL               ,
+            PERIODO_PAGO                 ,
+            MONTO_PRIMA_RECAUDADA        ,
+            ID_ACTIVIDAD_ECONOMICA_EVAL  ,
+            MONTO_PRIMA_TOTAL_SOLES      ,
+            COD_TIPO_DOCUMENTO_EVAL      ,
+            NUMERO_DOCUMENTO_EVAL        ,
+            OBSERVACION                  ,
+            REGLAS                       ,
+            FECHA_CREACION               ,
+            FECHA_MODIFICACION           ,
+            EXISTE_EN_PLAFT                ,
+            ACTIVO                       ,
+            NOMBRE_RAZON_SOCIAL_EVAL   ,
+            APE_PATERNO_EVAL             ,
+            APE_MATERNO_EVAL             ,
+            COD_ACTIVIDAD_ECONOMICA_EVAL ,
+            ID_REGIMEN_EVAL              ,
+            NUMERO_POLIZA_MATRIZ_EVAL    ,
+            ARCHIVO_EXCEL_ORIGEN         ,
+            ESTADO_POLIZA
+            FROM INTERSEGUROR.PLAFT_TRANSACCIONAL T;
+        """
+        execute_query_no_results(query_create_table_1, 'pg')
+
+        query_insert_3 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'DEPARTAMENTOOO-II-INICIO', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_3, 'pg') 
+
+        query_create_table_2 = """
+            CREATE TABLE INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_01
+            AS
+            SELECT DISTINCT T3.NUMERO_DOCUMENTO_EVAL, T3.DEPARTAMENTO_EVAL, T3.FEC_INICIO_VIGENCIA
+                FROM INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T3
+            INNER JOIN
+            (
+                SELECT DISTINCT T1.NUMERO_DOCUMENTO_EVAL, MAX(T1.FEC_INICIO_VIGENCIA) AS FEC_INICIO_VIGENCIA
+                FROM INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T1
+                INNER JOIN
+                (
+                    SELECT NUMERO_DOCUMENTO_EVAL, COUNT(DISTINCT coalesce(DEPARTAMENTO_EVAL,'-1')) AS CANTIDAD
+                    FROM
+                    (
+                    SELECT DISTINCT NUMERO_DOCUMENTO_EVAL, DEPARTAMENTO_EVAL
+                    FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP
+                    WHERE  NUMERO_DOCUMENTO_EVAL <> '0'
+                    ) AS TABAL
+                    GROUP BY NUMERO_DOCUMENTO_EVAL
+                    HAVING COUNT(DISTINCT coalesce(DEPARTAMENTO_EVAL,'-1')) > 1
+                ) T2 ON T2.NUMERO_DOCUMENTO_EVAL = T1.NUMERO_DOCUMENTO_EVAL
+                WHERE T1.NUMERO_DOCUMENTO_EVAL <> '0'
+                    AND T1.DEPARTAMENTO_EVAL <> 'NINGUNO'
+                GROUP BY T1.NUMERO_DOCUMENTO_EVAL
+            ) T4 ON T3.NUMERO_DOCUMENTO_EVAL = T4.NUMERO_DOCUMENTO_EVAL
+            AND T3.FEC_INICIO_VIGENCIA = T4.FEC_INICIO_VIGENCIA
+            AND T3.DEPARTAMENTO_EVAL <> 'NINGUNO';
+        """
+        execute_query_no_results(query_create_table_2, 'pg')
+
+        query_insert_4 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'DEPARTAMENTOOO-III-INICIO', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_4, 'pg')
+
+        query_create_table_3 = """
+            CREATE TABLE INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_02
+            AS
+            SELECT T.NUMERO_DOCUMENTO_EVAL, T.DEPARTAMENTO_EVAL,
+                    ROW_NUMBER() OVER(PARTITION BY  T.NUMERO_DOCUMENTO_EVAL  ORDER BY T.NUMERO_DOCUMENTO_EVAL) AS NRO
+            FROM   INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_01 T;
+        """
+        execute_query_no_results(query_create_table_3, 'pg')
+
+        query_insert_5 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'DEPARTAMENTOOO-IV-INICIO', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_5, 'pg')
+
+        query_create_table_4 = """
+            CREATE TABLE INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_03
+            AS
+            select * from INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_02 where NRO = 1;
+        """
+        execute_query_no_results(query_create_table_4, 'pg')
+
+        query_insert_6 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'Fin de tablas temporales', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_6, 'pg')
+
+        query_create_table_5 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP PTT set DEPARTAMENTO_EVAL = P.DEPARTAMENTO_EVAL FROM(
+            SELECT * FROM INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_03
+            ) P where PTT.NUMERO_DOCUMENTO_EVAL = P.NUMERO_DOCUMENTO_EVAL;
+        """
+        execute_query_no_results(query_create_table_5, 'pg')
+
+        query_insert_7 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'departamento3-FIN', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_7, 'pg')
+
+        query_create_table_6 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO
+            AS
+            select distinct numero_poliza
+            from(
+            select T1.NUMERO_POLIZA, count(distinct T1.DEPARTAMENTO_EVAL) as CANTIDAD
+            from   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T1
+            where T1.NUMERO_POLIZA not in
+            (
+            select distinct T1.NUMERO_POLIZA from INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T1
+            where T1.TIPO_CLIENTE in('CONTRATANTE','ASEGURADO')
+            )
+            and T1.TIPO_CLIENTE in('BENEFICIARIO')
+            and T1.COD_RAMO = '3' and T1.COD_SUBRAMO = '01' and T1.COD_PRODUCTO = '04'
+            group by T1.NUMERO_POLIZA
+            having count(distinct T1.DEPARTAMENTO_EVAL) > 1) AS TABAL;
+        """
+        execute_query_no_results(query_create_table_6, 'pg')
+
+        query_create_table_7 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO_UNICO
+            AS
+            SELECT  T.NUMERO_POLIZA, COUNT(DISTINCT T.DEPARTAMENTO_EVAL) AS CANTIDAD FROM
+            INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
+            INNER JOIN INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO  TD ON T.NUMERO_POLIZA = TD.NUMERO_POLIZA
+            WHERE T.DEPARTAMENTO_EVAL <> 'NINGUNO'
+            GROUP BY T.NUMERO_POLIZA
+            HAVING COUNT(DISTINCT T.DEPARTAMENTO_EVAL)  = 1;
+        """
+        execute_query_no_results(query_create_table_7, 'pg')
+
+        query_create_table_8 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO_UNICO_UPD
+            AS
+            SELECT DISTINCT U.NUMERO_POLIZA, T.DEPARTAMENTO_EVAL
+            FROM   INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO_UNICO U
+                INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T ON U.NUMERO_POLIZA = T.NUMERO_POLIZA
+            WHERE  T.DEPARTAMENTO_EVAL <> 'NINGUNO';
+        """
+        execute_query_no_results(query_create_table_8, 'pg')
+
+        query_create_table_9 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP PTT set DEPARTAMENTO_EVAL = DU.DEPARTAMENTO_EVAL,REGLAS = CONCAT(PTT.REGLAS,'-','R050') 
+            FROM(SELECT * FROM INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO_UNICO_UPD) DU where PTT.NUMERO_POLIZA = DU.NUMERO_POLIZA;
+        """
+        execute_query_no_results(query_create_table_9, 'pg')
+
+        query_insert_8 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'departamento4-INICIO', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_8, 'pg')
+
+        query_create_table_10 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_01
+            AS
+            select distinct numero_poliza
+            from(
+            select T1.NUMERO_POLIZA, count(distinct T1.DEPARTAMENTO_EVAL) as CANTIDAD
+            from   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T1
+            where T1.NUMERO_POLIZA not in
+            (
+            select distinct T1.NUMERO_POLIZA from INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T1
+            where T1.TIPO_CLIENTE in('CONTRATANTE','ASEGURADO')
+            )
+            and T1.TIPO_CLIENTE in('BENEFICIARIO')
+            and T1.COD_RAMO = '3' and T1.COD_SUBRAMO = '01' and T1.COD_PRODUCTO = '04'
+            group by T1.NUMERO_POLIZA
+            having count(distinct T1.DEPARTAMENTO_EVAL) > 1) AS TABAL;
+        """
+        execute_query_no_results(query_create_table_10, 'pg')
+
+        query_create_table_11 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_01
+            AS
+            SELECT  T.NUMERO_POLIZA, max(T.ID_REP_GENERAL) as ID_REP_GENERAL
+            FROM    INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
+                    INNER JOIN INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_01 TD ON T.NUMERO_POLIZA = TD.NUMERO_POLIZA
+            WHERE   T.DEPARTAMENTO_EVAL <> 'NINGUNO'
+            GROUP BY T.NUMERO_POLIZA;
+        """
+        execute_query_no_results(query_create_table_11, 'pg')
+
+        query_create_table_12 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_UPD_01
+            AS
+            SELECT DISTINCT U.NUMERO_POLIZA, T.DEPARTAMENTO_EVAL
+            FROM   INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_01 U
+                INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T ON U.NUMERO_POLIZA = T.NUMERO_POLIZA
+                AND T.ID_REP_GENERAL = U.ID_REP_GENERAL
+            WHERE  T.DEPARTAMENTO_EVAL <> 'NINGUNO';
+        """
+        execute_query_no_results(query_create_table_12, 'pg')
+
+        query_create_table_13 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP PTT set DEPARTAMENTO_EVAL = DU.DEPARTAMENTO_EVAL,REGLAS = CONCAT(PTT.REGLAS,'-','R050-1') 
+            FROM(SELECT * FROM INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_UPD_01) DU where PTT.NUMERO_POLIZA = DU.NUMERO_POLIZA;
+        """
+        execute_query_no_results(query_create_table_13, 'pg')
+
+        query_create_table_14 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_10
+            AS
+            select distinct numero_poliza
+            from(
+            select T1.NUMERO_POLIZA, count(distinct T1.DEPARTAMENTO_EVAL) as CANTIDAD
+            from   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T1
+            where T1.NUMERO_POLIZA in
+            (
+            '00000000000000068041-50806E','00000000000000001131-50803E'
+            )
+            and T1.ORIGEN = 'EXCEL'
+            group by T1.NUMERO_POLIZA
+            having count(distinct T1.DEPARTAMENTO_EVAL) > 1) AS TABAL;
+        """
+        execute_query_no_results(query_create_table_14, 'pg')
+
+        query_create_table_15 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_10
+            AS
+            SELECT  T.NUMERO_POLIZA, max(T.ID_REP_GENERAL) as ID_REP_GENERAL
+            FROM    INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
+                    INNER JOIN INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_10 TD ON T.NUMERO_POLIZA = TD.NUMERO_POLIZA
+            WHERE   T.DEPARTAMENTO_EVAL <> 'NINGUNO'
+            GROUP BY T.NUMERO_POLIZA;
+        """
+        execute_query_no_results(query_create_table_15, 'pg')
+
+        query_create_table_16 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_UPD_10
+            AS
+            SELECT DISTINCT U.NUMERO_POLIZA, T.DEPARTAMENTO_EVAL
+            FROM   INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_10 U
+                INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T ON U.NUMERO_POLIZA = T.NUMERO_POLIZA
+                AND T.ID_REP_GENERAL = U.ID_REP_GENERAL
+            WHERE  T.DEPARTAMENTO_EVAL <> 'NINGUNO';
+        """
+        execute_query_no_results(query_create_table_16, 'pg')
+
+        query_create_table_17 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP PTT set DEPARTAMENTO_EVAL = DU.DEPARTAMENTO_EVAL,REGLAS = CONCAT(PTT.REGLAS,'-','R057-1') 
+            FROM(SELECT * FROM INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_UPD_10) DU where PTT.NUMERO_POLIZA = DU.NUMERO_POLIZA;
+        """
+        execute_query_no_results(query_create_table_17, 'pg')
+
+        query_insert_9 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'departamento4.0-INICIO', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_9, 'pg')
+
+        query_create_table_18 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA
+            AS
+            SELECT COD_TIPO_DOCUMENTO_EVAL, NUMERO_DOCUMENTO_EVAL FROM(
+            SELECT T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL, COUNT(1)
+            FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
+            WHERE  T.DEPARTAMENTO_EVAL = 'NINGUNO'
+                AND T.TIPO_CLIENTE <> 'CONTRATANTE'
+            GROUP BY T.COD_TIPO_DOCUMENTO_EVAL,T.NUMERO_DOCUMENTO_EVAL
+            HAVING COUNT(1) = 1) AS TABAL;
+        """
+        execute_query_no_results(query_create_table_18, 'pg')
+
+        query_create_table_19 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA_01
+            AS
+            SELECT DISTINCT T.NUMERO_POLIZA, T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL, CAST('NINGUNO' AS VARCHAR(50)) AS DEPARTAMENTO_EVAL
+            FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
+                INNER JOIN INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA D ON
+                (T.COD_TIPO_DOCUMENTO_EVAL = D.COD_TIPO_DOCUMENTO_EVAL AND T.NUMERO_DOCUMENTO_EVAL = D.NUMERO_DOCUMENTO_EVAL);
+        """
+        execute_query_no_results(query_create_table_19, 'pg')
+
+        query_create_table_20 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_NUM_POLIZAS_SIN_DEPA
+            AS
+            SELECT DISTINCT T.NUMERO_POLIZA
+            FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
+                INNER JOIN INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA D ON
+                (T.COD_TIPO_DOCUMENTO_EVAL = D.COD_TIPO_DOCUMENTO_EVAL AND T.NUMERO_DOCUMENTO_EVAL = D.NUMERO_DOCUMENTO_EVAL);
+        """
+        execute_query_no_results(query_create_table_20, 'pg')
+
+        query_create_table_21 = """
+            CREATE TABLE INTERSEGUROR.TMP_PLAFT_NUM_POLIZAS_UPD_DEPA
+            AS
+            SELECT DISTINCT T.NUMERO_POLIZA, T.DEPARTAMENTO_EVAL
+            FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
+                INNER JOIN INTERSEGUROR.TMP_PLAFT_NUM_POLIZAS_SIN_DEPA D ON T.NUMERO_POLIZA = D.NUMERO_POLIZA
+            WHERE  T.DEPARTAMENTO_EVAL <> 'NINGUNO'
+                AND T.TIPO_CLIENTE = 'CONTRATANTE';
+        """
+        execute_query_no_results(query_create_table_21, 'pg')
+
+        query_create_table_22 = """
+            UPDATE INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA_01 TPC set DEPARTAMENTO_EVAL = U.DEPARTAMENTO_EVAL 
+            FROM(SELECT * FROM INTERSEGUROR.TMP_PLAFT_NUM_POLIZAS_UPD_DEPA) U 
+            where TPC.NUMERO_POLIZA = U.NUMERO_POLIZA;
+        """
+        execute_query_no_results(query_create_table_22, 'pg')
+
+        query_create_table_23 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP PTT set DEPARTAMENTO_EVAL = D.DEPARTAMENTO_EVAL,REGLAS = CONCAT(PTT.REGLAS,'-','R058') 
+            FROM(SELECT * FROM INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA_01 WHERE DEPARTAMENTO_EVAL <> 'NINGUNO'
+            ) D where PTT.NUMERO_POLIZA = D.NUMERO_POLIZA AND PTT.COD_TIPO_DOCUMENTO_EVAL = D.COD_TIPO_DOCUMENTO_EVAL 
+            AND PTT.NUMERO_DOCUMENTO_EVAL = D.NUMERO_DOCUMENTO_EVAL;
+        """
+        execute_query_no_results(query_create_table_23, 'pg')
+
+        query_insert_10 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'departamento4.1-INICIO', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_10, 'pg')
+
+        query_insert_11 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'INICIO-DEPA-VEHICULAR', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_11, 'pg')
+
+        query_create_table_24 = """
+            CREATE TABLE INTERSEGUROR.PLAFT_TMP_VEHI_SIN_DEPA
+            AS
+            SELECT T.ID_REP_GENERAL FROM INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
+            WHERE T.COD_RAMO = '21.0' AND T.COD_SUBRAMO = '1.0' AND T.COD_PRODUCTO = '66.0'
+            AND T.DEPARTAMENTO_EVAL = 'NINGUNO';
+        """
+        execute_query_no_results(query_create_table_24, 'pg')
+
+        query_create_table_25 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP PTT set DEPARTAMENTO_EVAL = 'LIMA',REGLAS = CONCAT(PTT.REGLAS,' - R065') FROM(
+            SELECT * FROM INTERSEGUROR.PLAFT_TMP_VEHI_SIN_DEPA
+            ) PP where PTT.ID_REP_GENERAL = PP.ID_REP_GENERAL;
+        """
+        execute_query_no_results(query_create_table_25, 'pg')
+
+        query_insert_12 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'FIN-DEPA-VEHICULAR', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_12, 'pg')
+
+        query_create_table_26 = """
+            update INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP PT set DEPARTAMENTO_EVAL = 'EXTRANJERO' WHERE PT.NUMERO_POLIZA = '47077';
+        """
+        execute_query_no_results(query_create_table_26, 'pg')
+
+        query_create_table_27 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP PTT set ID_DEPARTAMENTO = PTT.ID_DEPARTAMENTO FROM(
+            SELECT * FROM INTERSEGUROR.PLAFT_D_DEPARTAMENTO
+          ) T where PTT.DEPARTAMENTO_EVAL = T.CODIGO;
+        """
+        execute_query_no_results(query_create_table_27, 'pg')
+
+        query_insert_13 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'reglas..', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_13, 'pg')
+
+        query_create_table_28 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP PT
+            SET    ID_DEPARTAMENTO = -1,
+                REGLAS = CONCAT(PT.REGLAS,'-','R018')
+            WHERE  PT.ID_DEPARTAMENTO = '-1';
+        """
+        execute_query_no_results(query_create_table_28, 'pg')
+
+
+        query_create_table_29 = """
+            TRUNCATE TABLE INTERSEGUROR.PLAFT_TRANSACCIONAL;
+        """
+        execute_query_no_results(query_create_table_29, 'pg')
+
+        query_insert_data = """
+            INSERT INTO interseguror.plaft_transaccional
+            SELECT * FROM interseguror.plaft_transaccional_tmp;
+        """
+        execute_query_no_results(query_insert_data, 'pg')
+
+        query_insert_14 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'cargar-transaccional-fin', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_14, 'pg')
+
+        query_insert_15 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'ELIMINANDO TABLAS', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_15, 'pg')
+
+        table_names_delete = [
+            'tmp_departamento_unico_01',
+            'tmp_departamento_unico_02',
+            'tmp_departamento_unico_03',
+        ]
+    
+        schema = 'interseguror'
+    
+        for table_name in table_names_delete:
+            logger.info(f"Verificando existencia de la tabla: {schema}.{table_name}")
+            
+            query_check_table = f"""
+                SELECT COUNT(1) 
+                FROM information_schema.tables 
+                WHERE table_schema = '{schema}' 
+                AND table_name = '{table_name}';
+            """
+            
+            V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
+            
+            if V_CANT_REG and V_CANT_REG[0][0] > 0:
+                logger.info(f"La tabla {schema}.{table_name} existe. Procediendo a eliminarlo.")
+
+                query_drop_table = f"DROP TABLE IF EXISTS {schema}.{table_name} CASCADE;"
+                
+                execute_query_no_results(query_drop_table, 'pg')
+                
+                logger.info(f"Tabla {schema}.{table_name} eliminada exitosamente.")
+            else:
+                logger.info(f"La tabla {schema}.{table_name} no existe. No se requiere eliminación.")
+
+        query_insert_16 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'departamento4-FIN', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_16, 'pg')
+
+        query_check_table = f"""
+                SELECT COUNT(1) 
+                FROM information_schema.tables 
+                WHERE table_schema = 'interseguror' 
+                AND table_name = 'plaft_transaccional_tmp';
+            """
+            
+        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
+        
+        if V_CANT_REG and V_CANT_REG[0][0] > 0:
+            logger.info(f"La tabla interseguror.plaft_transaccional_tmp existe. Procediendo a eliminarlo.")
+
+            query_drop_table = f"DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
+            
+            execute_query_no_results(query_drop_table, 'pg')
+            
+            logger.info(f"Tabla interseguror.plaft_transaccional_tmp eliminada exitosamente.")
+        else:
+            logger.info(f"La tabla interseguror.plaft_transaccional_tmp no existe. No se requiere eliminación.")
+
+        query_insert_17 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'FIN-FIN', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_17, 'pg')
+
+    except Exception as e:
+        logger.error(f"Error en usp_retro_det_val_departamento: {str(e)}")
+        raise
+
+    logger.info(f'usp_retro_det_val_departamento - fin') 
+
+
+def usp_retro_det_val_prod_riesgo():
+
+    logger.info(f'usp_retro_det_val_prod_riesgo - inicio') 
+
+    try:
+        registrar_log_interno('12.1 LIMPIAR INDICES', 2) 
+
+        usp_crear_indices()
+
+        registrar_log_interno('12.2 OBTENER IDENTIFICADOR DE PRODUCTO', 2) 
+
+        update_transaccional_query_1 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set ID_PRODUCTO_KEY = PP.ID_PRODUCTO_KEY,ID_RIESGO_SBS = PP.ID_RIESGO_SBS
+            FROM(SELECT
+            coalesce(P.COD_RAMO,'0') AS COD_RAMO,
+                        coalesce(P.COD_SUBRAMO,'0') AS COD_SUBRAMO,
+                        coalesce(P.COD_PRODUCTO,'0') AS COD_PRODUCTO,
+                        coalesce(P.DESC_PRODUCTO,'0') AS DESC_PRODUCTO,
+                        P.ID_PRODUCTO_KEY,
+                        P.ID_RIESGO_SBS
+            FROM INTERSEGUROR.PLAFT_D_PRODUCTO P
+            WHERE P.ORIGEN IN('ACSELE','EXPSERV','RVIADM','ADMWR')) PP
+            where coalesce(T.COD_RAMO,'0') = PP.COD_RAMO 
+            AND coalesce(T.COD_SUBRAMO,'0') = PP.COD_SUBRAMO 
+            AND coalesce(T.COD_PRODUCTO,'0') = PP.COD_PRODUCTO 
+            AND coalesce(T.GLOSA_PRODUCTO,'0') = PP.DESC_PRODUCTO;
+        """
+        execute_query_no_results(update_transaccional_query_1, 'pg')
+
+        update_transaccional_query_2 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set ID_PRODUCTO_KEY = PP.ID_PRODUCTO_KEY,ID_RIESGO_SBS = PP.ID_RIESGO_SBS
+            FROM(SELECT
+            coalesce(P.COD_RAMO,'0') AS COD_RAMO,
+                            coalesce(P.COD_PRODUCTO,'0') AS COD_PRODUCTO,
+                            coalesce(P.DESC_PRODUCTO,'0') AS DESC_PRODUCTO,
+                            P.ID_PRODUCTO_KEY,
+                            P.ID_RIESGO_SBS
+            FROM INTERSEGUROR.PLAFT_D_PRODUCTO P
+            WHERE P.ORIGEN IN('AS400','DIGITAL')) PP
+            where coalesce(T.COD_RAMO,'0') = PP.COD_RAMO 
+            AND coalesce(T.COD_PRODUCTO,'0') = PP.COD_PRODUCTO 
+            AND coalesce(T.GLOSA_PRODUCTO,'0') = PP.DESC_PRODUCTO;
+        """
+        execute_query_no_results(update_transaccional_query_2, 'pg')
+
+        update_transaccional_query_3 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set ID_PRODUCTO_KEY = PP.ID_PRODUCTO_KEY,ID_RIESGO_SBS = PP.ID_RIESGO_SBS,
+            GLOSA_PRODUCTO = PP.DESC_PRODUCTO
+            FROM(SELECT
+            coalesce(P.COD_RAMO,'0') AS COD_RAMO,
+                            coalesce(P.COD_PRODUCTO,'0') AS COD_PRODUCTO,
+                            coalesce(P.DESC_PRODUCTO,'0') AS DESC_PRODUCTO,
+                            P.ID_PRODUCTO_KEY,
+                            P.ID_RIESGO_SBS
+            FROM INTERSEGUROR.PLAFT_D_PRODUCTO P
+            WHERE P.ORIGEN IN('EXCEL')) PP
+            where coalesce(T.COD_RAMO,'0') = PP.COD_RAMO 
+            AND coalesce(T.COD_PRODUCTO,'0') = PP.COD_PRODUCTO;
+        """
+        execute_query_no_results(update_transaccional_query_3, 'pg')
+
+    except Exception as e:
+        logger.error(f"Error en usp_retro_det_val_prod_riesgo: {str(e)}")
+        raise
+
+    logger.info(f'usp_retro_det_val_prod_riesgo - fin') 
+
+
+
+def usp_retro_det_val_tipo_persona():
+
+    logger.info(f'usp_retro_det_val_tipo_persona - inicio') 
+
+    try:
+        update_transaccional_query_1 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            SET    TIPO_PERSONA = 'NATURAL'
+            WHERE  T.TIPO_PERSONA = 'PERSONA NATURAL';
+        """
+        execute_query_no_results(update_transaccional_query_1, 'pg')
+
+        update_transaccional_query_2 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            SET    TIPO_PERSONA = 'JURIDICO'
+            WHERE  T.TIPO_PERSONA =('PERSONA JURIDICA');
+        """
+        execute_query_no_results(update_transaccional_query_2, 'pg')
+
+        update_transaccional_query_3 = f"""
+            update INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set TIPO_PERSONA = 'JURIDICO'
+            where COD_TIPO_DOCUMENTO_EVAL = 'RUCJ';
+        """
+        execute_query_no_results(update_transaccional_query_3, 'pg')
+
+        update_transaccional_query_4 = f"""
+            update INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set TIPO_PERSONA = 'NATURAL'
+            where COD_TIPO_DOCUMENTO_EVAL = 'DNI';
+        """
+        execute_query_no_results(update_transaccional_query_4, 'pg')
+
+        update_transaccional_query_5 = f"""
+            update INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set TIPO_PERSONA = 'NATURAL'
+            where COD_TIPO_DOCUMENTO_EVAL <> 'RUCJ' and T.TIPO_PERSONA = 'JURIDICO';
+        """
+        execute_query_no_results(update_transaccional_query_5, 'pg')
+
+        update_transaccional_query_6 = f"""
+            update INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set TIPO_PERSONA = 'NATURAL'
+            where COD_TIPO_DOCUMENTO_EVAL <> 'RUCJ';
+        """
+        execute_query_no_results(update_transaccional_query_6, 'pg')
+
+    except Exception as e:
+        logger.error(f"Error en usp_retro_det_val_tipo_persona: {str(e)}")
+        raise
+
+    logger.info(f'usp_retro_det_val_tipo_persona - fin') 
+
+
+def usp_retro_det_val_regimen():
+
+    logger.info(f'usp_retro_det_val_regimen - inicio') 
+
+    try:
+        query_insert_1 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'EVAL-REGIMEN-INICIO', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_1, 'pg')   
+
+        query_check_table = """
+            SELECT COUNT(1) 
+            FROM information_schema.tables 
+            WHERE table_schema = 'interseguror' 
+            AND table_name = 'tmp_clientes_maximo_regimen';
+        """
+        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
+
+        if V_CANT_REG and V_CANT_REG[0][0] > 0:
+            query_drop_table = "DROP TABLE IF EXISTS interseguror.tmp_clientes_maximo_regimen CASCADE;"
+            execute_query_no_results(query_drop_table, 'pg')
+
+        query_insert_2 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'USP_RETRO_DET_VAL_REGIMEN - 01', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_2, 'pg') 
+
+        update_transaccional_query_1 = f"""
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL TT
+            set EXISTE_EN_PLAFT = PP.EXISTE_CLIENTE,ID_REGIMEN_EVAL = PP.ID_REGIMEN_FINAL,
+            REGLAS = CONCAT(TT.REGLAS,'-','R019')
+            FROM(SELECT  DISTINCT T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL, LNR.CALIFICACION, LNR.CUMULO,
+                                        P.ID_PRODUCTO_KEY,
+                                        P.ID_REGIMEN AS ID_REGIMEN_INICIAL,
+                                        CASE WHEN LNR.CALIFICACION IS NOT NULL AND LNR.CALIFICACION = 'Alto' THEN 3
+            WHEN LNR.CALIFICACION IS NOT NULL AND LNR.CALIFICACION = 'Bajo' AND  P.ID_REGIMEN in(1,2) AND LNR.CUMULO > 1500 THEN 2
+            WHEN LNR.CALIFICACION IS NULL THEN P.ID_REGIMEN
+            ELSE 1 END AS ID_REGIMEN_FINAL,
+                                        CASE WHEN LNR.CALIFICACION IS NOT NULL THEN 1
+            ELSE 0 END AS EXISTE_CLIENTE
+            FROM    INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            INNER JOIN INTERSEGUROR.PLAFT_D_PRODUCTO P
+            ON T.ID_PRODUCTO_KEY = P.ID_PRODUCTO_KEY
+            LEFT JOIN INTERSEGUROR.PLAFT_D_LISTA_NEGRA LNR
+            ON  (T.COD_TIPO_DOCUMENTO_EVAL = LNR.COD_TIPO_DOCUMENTO
+            AND T.NUMERO_DOCUMENTO_EVAL = LNR.NUMERO_DOCUMENTO)) PP
+            where TT.COD_TIPO_DOCUMENTO_EVAL = PP.COD_TIPO_DOCUMENTO_EVAL 
+            AND TT.NUMERO_DOCUMENTO_EVAL = PP.NUMERO_DOCUMENTO_EVAL 
+            AND TT.ID_PRODUCTO_KEY = PP.ID_PRODUCTO_KEY;
+        """
+        execute_query_no_results(update_transaccional_query_1, 'pg')
+
+        query_insert_3 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'USP_RETRO_DET_VAL_REGIMEN - 02', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_3, 'pg') 
+
+        query_for_loop_1 = """
+            SELECT  DISTINCT T.NUMERO_DOCUMENTO_EVAL,
+                             P.ID_PRODUCTO_KEY,
+                             P.ID_REGIMEN AS ID_REGIMEN_INICIAL
+            FROM    INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            INNER JOIN INTERSEGUROR.PLAFT_D_PRODUCTO P
+            ON T.ID_PRODUCTO_KEY = P.ID_PRODUCTO_KEY
+            WHERE T.COD_TIPO_DOCUMENTO_EVAL IS NULL
+            AND T.ID_REGIMEN_EVAL IS NULL
+            AND (T.ORIGEN IN('ACSELE','EXPSERV','DIGITAL','AS400','ADMWR','RVIADM')
+            OR (T.ORIGEN = 'EXCEL' AND T.GLOSA_PRODUCTO IN('VidaGrupoComplementario','VidaLeyTTL')));
+        """
+
+        # Obtener resultados
+        items_loop_1 = execute_query_with_results(query_for_loop_1, 'pg')
+
+        # Bucle para actualizar con los resultados del SELECT
+        for item in items_loop_1:
+            execute_query_no_results(
+                f"""UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+                    SET    ID_REGIMEN_EVAL = '{item[2]}',REGLAS = CONCAT(T.REGLAS,'-','R020')
+                    WHERE  coalesce(T.NUMERO_DOCUMENTO_EVAL,'-') =  coalesce('{item[0]}','-')
+                    AND T.ID_REGIMEN_EVAL IS NULL;
+                    """, 
+                'pg'
+            )
+
+        query_insert_4 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'USP_RETRO_DET_VAL_REGIMEN - 03', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_4, 'pg') 
+
+        query_for_loop_2 = """
+            SELECT
+            P.ID_PRODUCTO_KEY,
+            P.ID_REGIMEN AS ID_REGIMEN_INICIAL
+            FROM    INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            INNER JOIN INTERSEGUROR.PLAFT_D_PRODUCTO P
+            ON T.ID_PRODUCTO_KEY = P.ID_PRODUCTO_KEY
+            WHERE T.COD_TIPO_DOCUMENTO IS NULL
+            AND T.NUMERO_DOCUMENTO IS NULL
+            AND T.ID_REGIMEN_EVAL IS NULL
+            AND (T.ORIGEN IN('ACSELE','EXPSERV','DIGITAL','AS400','ADMWR','RVIADM')
+            OR (T.ORIGEN = 'EXCEL' AND T.GLOSA_PRODUCTO IN('VidaGrupoComplementario','VidaLeyTTL')));
+        """
+
+        items_loop_2 = execute_query_with_results(query_for_loop_2, 'pg')
+
+        # Bucle para actualizar con los resultados del SELECT
+        for item in items_loop_2:
+            execute_query_no_results(
+                f"""UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+                    SET    ID_REGIMEN_EVAL = '{item[1]}',REGLAS = CONCAT(T.REGLAS,'-','R021')
+                    WHERE  T.ID_PRODUCTO_KEY = '{item[0]}'
+                    AND T.ID_REGIMEN_EVAL IS NULL;
+                    """, 
+                'pg'
+            )
+
+        query_insert_5 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'USP_RETRO_DET_VAL_REGIMEN - 04', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_5, 'pg') 
+
+        query_create_table = """
+            CREATE TABLE INTERSEGUROR.TMP_CLIENTES_MAXIMO_REGIMEN
+            AS
+            SELECT T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL, MAX(T.ID_REGIMEN_EVAL) AS ID_REGIMEN_EVAL
+            FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            WHERE  T.ACTIVO = 1
+            GROUP BY T.COD_TIPO_DOCUMENTO_EVAL,T.NUMERO_DOCUMENTO_EVAL;
+        """
+        execute_query_no_results(query_create_table, 'pg')
+
+        update_transaccional_query_2 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T set ID_REGIMEN_EVAL = U.ID_REGIMEN_EVAL FROM(
+                   SELECT * FROM INTERSEGUROR.TMP_CLIENTES_MAXIMO_REGIMEN
+              ) U where T.COD_TIPO_DOCUMENTO_EVAL = U.COD_TIPO_DOCUMENTO_EVAL 
+              AND T.NUMERO_DOCUMENTO_EVAL = U.NUMERO_DOCUMENTO_EVAL ;
+        """
+        execute_query_no_results(update_transaccional_query_2, 'pg')
+
+        query_insert_6 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'EVAL-REGIMEN-FIN', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_6, 'pg')    
+
+    except Exception as e:
+        logger.error(f"Error en usp_retro_det_val_regimen: {str(e)}")
+        raise
+
+    logger.info(f'usp_retro_det_val_regimen - fin') 
