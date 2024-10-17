@@ -13,7 +13,11 @@ from ..repository.reportes_plaft_usp_retro_repository import (
     usp_retro_det_poliza_matriz,
     usp_retro_det_calc_acti_econo,
     usp_retro_det_ini_valores,
-    usp_retro_desactivar_aseg_previ
+    usp_retro_desactivar_aseg_previ,
+    actualizar_riesgo_sbs,
+    evaluar_montos_dobles,
+    calcular_prima,
+    excluir_polizas    
 )
 import pandas as pd
 from ..utils.logger import logger
@@ -74,44 +78,21 @@ def reportes_plaft_usp_retro_acsele_service():
     registrar_log_interno("8. DESACTIVAR ASEGURDADOS PREVICIONALES - FIN")
 
 
-def actualizacion_envio_acsele_service():
-    logger.info("actualizacion_envio_acsele - inicio")
 
-    logger.info("actualizacion_envio_acsele - Consultando polizas Acsele")
-    dfAlloy = obtener_polizas_alloy()
-
-    logger.info("actualizacion_envio_acsele - Consultando polizas SME")
-    dfSme = obtener_polizas_sme()
-
-    logger.info("actualizacion_envio_acsele - Cruzando polizas Acsele x SME")
-    merged_df = pd.merge(
-        dfAlloy,
-        dfSme[["idproducto", "idpoliza", "idoperacion", "evento", "idenviosme"]],
-        on=["idproducto", "idpoliza", "idoperacion", "evento"],
-        how="inner",
-    )
-    merged_df = merged_df.rename(columns={"idenviosme_y": "idenviosme"})
-    merged_df = merged_df.drop("idenviosme_x", axis=1)
-    merged_df = merged_df.drop_duplicates(
-        subset=["idproducto", "evento", "idpoliza", "idoperacion"]
-    )
-
-    logger.info("actualizacion_envio_acsele - Limpiando tablas temporales")
-    limpiar_temporal("interseguror.impmas_temp_envio")
-
-    logger.info("actualizacion_envio_acsele - Insertando polizas en temporal")
-    insertar_polizas_temporal(merged_df)
-
-    logger.info(
-        "actualizacion_envio_acsele - Actualizando estado sme de las polizas Acsele"
-    )
-    updates = update_impmas_desde_temp()
-
-    response = {
-        "polizas alloy": {"count": len(dfAlloy.to_dict(orient="records"))},
-        "polizas sme": {"count": len(dfSme.to_dict(orient="records"))},
-        "polizas mergeadas": {"count": len(merged_df.to_dict(orient="records"))},
-        "polizas actualizadas": {"count": updates},
-    }
-    logger.info("actualizacion_envio_acsele - fin")
-    return response
+    registrar_log_interno("17. EXCLUIR POLIZAS - INICIO")
+    excluir_polizas()
+    registrar_log_interno("17. EXCLUIR POLIZAS - FIN")
+    
+    registrar_log_interno("19. CALCULAR PRIMA - INICIO")
+    calcular_prima()
+    registrar_log_interno("19. CALCULAR PRIMA - FIN")
+    
+    registrar_log_interno("20. EVALUAR MONTOS DOBLES - INICIO")
+    evaluar_montos_dobles()
+    registrar_log_interno("20. EVALUAR MONTOS DOBLES - FIN")
+    
+    registrar_log_interno("21. ACTUALIZAR RIESGO SBS DESG.INDIV - INICIO")
+    actualizar_riesgo_sbs()
+    registrar_log_interno("21. ACTUALIZAR RIESGO SBS DESG.INDIV - FIN")
+    
+    registrar_log_interno("USP_RETRO_TRANSACCIONAL - FIN")
