@@ -174,33 +174,21 @@ def usp_retro_det_activo():
 
     logger.info(f'usp_retro_det_activo - inicio') 
 
-    query_check_table = """
-    SELECT COUNT(1) 
-    FROM information_schema.tables 
-    WHERE table_schema = 'interseguror' 
-      AND table_name = 'plaft_transaccional_tmp';
-    """
-    V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-
-    logger.info(f'Imprimiendo cantidad de registros check table {V_CANT_REG}') 
-
-    if V_CANT_REG and V_CANT_REG[0][0] > 0:
-        # Si la tabla existe, se elimina
-        query_drop_table = "DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
-        execute_query_no_results(query_drop_table, 'pg')
+    query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+    execute_query_no_results(query_truncate_table, 'pg')
 
     # 1.1. LIMPIAR INDICES
-    registrar_log_interno('1.1. LIMPIAR INDICES - INICIO', 2)
+    #registrar_log_interno('1.1. LIMPIAR INDICES - INICIO', 2)
 
-    usp_limpiar_indices()
+    #usp_limpiar_indices()
 
-    registrar_log_interno('1.1. LIMPIAR INDICES - FIN', 2)
+    #registrar_log_interno('1.1. LIMPIAR INDICES - FIN', 2)
 
     # 1.2. CREANDO TABLA TEMPORAL
     registrar_log_interno('1.2. CREANDO TABLA TEMPORAL - INICIO', 2)
     
     query_create_table = """
-    CREATE TABLE interseguror.plaft_transaccional_tmp AS
+    INSERT INTO interseguror.plaft_transaccional_tmp
     SELECT
         ID_REP_GENERAL, NUMERO_POLIZA, LINEA_NEGOCIO, COD_MONEDA, MONTO_PRIMA,
         COD_FRECUENCIA_PAGO, MONTO_PRIMA_TOTAL, NOMBRE_RAZON_SOCIAL, APE_PATERNO,
@@ -237,11 +225,8 @@ def usp_retro_det_activo():
 
     registrar_log_interno('1.3. RECARGANDO LA TABLA - FIN', 2)
 
-    # Verifica si la tabla temporal aún existe y la elimina
-    V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-    if V_CANT_REG and V_CANT_REG[0][0] > 0:
-        query_drop_table = "DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
-        execute_query_no_results(query_drop_table, 'pg')
+    query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+    execute_query_no_results(query_truncate_table, 'pg')
 
     logger.info(f'usp_retro_det_activo - fin')
 
@@ -250,44 +235,12 @@ def usp_retro_det_add_aseg_dit():
 
     logger.info(f'usp_retro_det_add_aseg_dit - inicio') 
 
-    schema = 'interseguror'
-    temp_table = 'plaft_transaccional_tmp'
-    main_table = 'plaft_transaccional'
-
     try:
-        logger.info(f"Verificando existencia de la tabla {schema}.{temp_table}")
-        query_check_table = f"""
-            SELECT COUNT(1) 
-            FROM information_schema.tables 
-            WHERE table_schema = '{schema}' 
-              AND table_name = '{temp_table}';
-        """
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-        
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            logger.info(f"La tabla {schema}.{temp_table} existe. Procediendo a eliminarla.")
-            query_drop_table = f"DROP TABLE IF EXISTS {schema}.{temp_table} CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
-            logger.info(f"Tabla {schema}.{temp_table} eliminada exitosamente.")
-        else:
-            logger.info(f"La tabla {schema}.{temp_table} no existe. No se requiere eliminación.")
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
     except Exception as e:
-        logger.error(f"Error al verificar o eliminar la tabla {schema}.{temp_table}: {e}")
-        raise
-
-    # 2.1. ELIMINANDO INDICES
-    try:
-        logger.info("Iniciando limpieza de índices - Inicio")
-
-        registrar_log_interno('2.1 LIMPIAR INDICES - INICIO', 2)
-
-        usp_limpiar_indices()
-
-        registrar_log_interno('2.1 LIMPIAR INDICES - FIN', 2)
-
-        logger.info("Limpieza de índices completada - Fin")
-    except Exception as e:
-        logger.error(f"Error durante la limpieza de índices: {e}")
+        logger.error(f"Error al truncar la tabla interseguror.plaft_transaccional_tmp: {e}")
         raise
 
     # 2.2. ELIMINANDO REGISTROS ESPECÍFICOS
@@ -296,7 +249,7 @@ def usp_retro_det_add_aseg_dit():
 
         # Eliminar registros donde OBSERVACION LIKE '%REGISTRA ASEGURADO POR DESG_TARJ_INDIV%'
         query_delete = f"""
-            DELETE FROM {schema}.{main_table} 
+            DELETE FROM interseguror.plaft_transaccional 
             WHERE OBSERVACION LIKE '%REGISTRA ASEGURADO POR DESG_TARJ_INDIV%';
         """
         execute_query_no_results(query_delete, 'pg')
@@ -315,9 +268,8 @@ def usp_retro_det_add_aseg_dit():
 
         registrar_log_interno('2.3 CARGANDO TEMPORTAL - INICIO', 2)
         
-        # Crear la tabla temporal PLAFT_TRANSACCIONAL_TMP
-        query_create_temp = f"""
-            CREATE TABLE {schema}.{temp_table} AS
+        query_insert_temp = f"""
+            INSERT INTO interseguror.plaft_transaccional_tmp
             SELECT
             ID_REP_GENERAL ,
             numero_poliza                ,
@@ -438,8 +390,7 @@ def usp_retro_det_add_aseg_dit():
             WHERE T.tipo_cliente = 'CONTRATANTE' AND
                   T.GLOSA_PRODUCTO = 'DesgTarjetasIndividual'  ;
         """
-        execute_query_no_results(query_create_temp, 'pg')
-        logger.info(f"Tabla temporal {schema}.{temp_table} creada exitosamente.")
+        execute_query_no_results(query_insert_temp, 'pg')
         
         registrar_log_interno('2.3 CARGANDO TEMPORTAL - FIN', 2)
 
@@ -451,9 +402,9 @@ def usp_retro_det_add_aseg_dit():
     # 2.3. MODIFICACIÓN Y TRUNCADO DE LA TABLA PRINCIPAL
     try:
         # Truncar la tabla principal
-        query_truncate = f"TRUNCATE TABLE {schema}.{main_table};"
+        query_truncate = f"TRUNCATE TABLE interseguror.plaft_transaccional;"
         execute_query_no_results(query_truncate, 'pg')
-        logger.info(f"Tabla {schema}.{main_table} truncada exitosamente.")
+        logger.info(f"Tabla interseguror.plaft_transaccional truncada exitosamente.")
     except Exception as e:
         logger.error(f"Error durante la modificación o truncado de la tabla principal: {e}")
         raise
@@ -466,11 +417,11 @@ def usp_retro_det_add_aseg_dit():
         
         # Insertar datos desde la tabla temporal a la tabla principal
         query_insert = f"""
-            INSERT INTO {schema}.{main_table}
-            SELECT * FROM {schema}.{temp_table};
+            INSERT INTO interseguror.plaft_transaccional
+            SELECT * FROM interseguror.plaft_transaccional_tmp;
         """
         execute_query_no_results(query_insert, 'pg')
-        logger.info(f"Datos recargados exitosamente en la tabla {schema}.{main_table}.")
+        logger.info(f"Datos recargados exitosamente en la tabla interseguror.plaft_transaccional.")
         
         registrar_log_interno('2.4 RECARGANDO DATOS - FIN', 2)
 
@@ -481,18 +432,14 @@ def usp_retro_det_add_aseg_dit():
 
     # 3. Verifica si existe la tabla PLAFT_TRANSACCIONAL_TMP y la elimina si existe
     try:
-        logger.info(f"Verificando existencia de la tabla temporal {schema}.{temp_table} para eliminarla.")
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
         
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            logger.info(f"La tabla {schema}.{temp_table} existe. Procediendo a eliminarla.")
-            query_drop_table = f"DROP TABLE IF EXISTS {schema}.{temp_table} CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
-            logger.info(f"Tabla {schema}.{temp_table} eliminada exitosamente.")
-        else:
-            logger.info(f"La tabla {schema}.{temp_table} no existe. No se requiere eliminación.")
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
+
+        logger.info(f"La tabla interseguror.plaft_transaccional_tmp ha sido truncada")
     except Exception as e:
-        logger.error(f"Error al verificar o eliminar la tabla temporal {schema}.{temp_table}: {e}")
+        logger.error(f"Error al truncar la tabla interseguror.plaft_transaccional_tmp: {e}")
         raise
 
     logger.info(f'usp_retro_det_add_aseg_dit - fin') 
@@ -503,44 +450,12 @@ def usp_retro_det_add_aseg_soat():
 
     logger.info(f'usp_retro_det_add_aseg_soat - inicio') 
 
-    schema = 'interseguror'
-    temp_table = 'plaft_transaccional_tmp'
-    main_table = 'plaft_transaccional'
-
     try:
-        logger.info(f"Verificando existencia de la tabla {schema}.{temp_table}")
-        query_check_table = f"""
-            SELECT COUNT(1) 
-            FROM information_schema.tables 
-            WHERE table_schema = '{schema}' 
-              AND table_name = '{temp_table}';
-        """
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-        
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            logger.info(f"La tabla {schema}.{temp_table} existe. Procediendo a eliminarla.")
-            query_drop_table = f"DROP TABLE IF EXISTS {schema}.{temp_table} CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
-            logger.info(f"Tabla {schema}.{temp_table} eliminada exitosamente.")
-        else:
-            logger.info(f"La tabla {schema}.{temp_table} no existe. No se requiere eliminación.")
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
     except Exception as e:
-        logger.error(f"Error al verificar o eliminar la tabla {schema}.{temp_table}: {e}")
-        raise
-
-    # 3.1. ELIMINANDO INDICES
-    try:
-        logger.info("Iniciando limpieza de índices - Inicio")
-
-        registrar_log_interno('3.1 LIMPIANDO INDICES - INICIO', 2)
-
-        usp_limpiar_indices()
-
-        registrar_log_interno('3.1 LIMPIANDO INDICES - FIN', 2)
-
-        logger.info("Limpieza de índices completada - Fin")
-    except Exception as e:
-        logger.error(f"Error durante la limpieza de índices: {e}")
+        logger.error(f"Error al truncar la tabla interseguror.plaft_transaccional_tmp: {e}")
         raise
 
     # 3.2. ELIMINAR REGISTRADOS EN ESTE PROCESO(NO VIENE DE DATOS DE LA EXTRACCION)
@@ -549,7 +464,7 @@ def usp_retro_det_add_aseg_soat():
 
         # Eliminar registros donde OBSERVACION LIKE '%REGISTRA ASEGURADO POR SOAT%'
         query_delete = f"""
-            DELETE FROM {schema}.{main_table} 
+            DELETE FROM interseguror.plaft_transaccional 
             WHERE OBSERVACION LIKE '%REGISTRA ASEGURADO POR SOAT%';
         """
         execute_query_no_results(query_delete, 'pg')
@@ -570,7 +485,7 @@ def usp_retro_det_add_aseg_soat():
         
         # Crear la tabla temporal PLAFT_TRANSACCIONAL_TMP
         query_create_temp = f"""
-            CREATE TABLE {schema}.{temp_table} AS
+          INSERT INTO interseguror.plaft_transaccional_tmp
           SELECT
           ID_REP_GENERAL ,
           numero_poliza                ,
@@ -692,7 +607,6 @@ def usp_retro_det_add_aseg_soat():
                 T.COD_RAMO = '6.0' AND T.COD_SUBRAMO = '2.0' AND T.COD_PRODUCTO = '15.0';
         """
         execute_query_no_results(query_create_temp, 'pg')
-        logger.info(f"Tabla temporal {schema}.{temp_table} creada exitosamente.")
         
         registrar_log_interno('3.3. CARGANDO TEMPORAL - FIN', 2)
 
@@ -704,9 +618,9 @@ def usp_retro_det_add_aseg_soat():
     # 3.3. MODIFICACIÓN Y TRUNCADO DE LA TABLA PRINCIPAL
     try:
         # Truncar la tabla principal
-        query_truncate = f"TRUNCATE TABLE {schema}.{main_table};"
+        query_truncate = f"TRUNCATE TABLE interseguror.plaft_transaccional;"
         execute_query_no_results(query_truncate, 'pg')
-        logger.info(f"Tabla {schema}.{main_table} truncada exitosamente.")
+        logger.info(f"Tabla interseguror.plaft_transaccional truncada exitosamente.")
     except Exception as e:
         logger.error(f"Error durante la modificación o truncado de la tabla principal: {e}")
         raise
@@ -719,11 +633,11 @@ def usp_retro_det_add_aseg_soat():
         
         # Insertar datos desde la tabla temporal a la tabla principal
         query_insert = f"""
-            INSERT INTO {schema}.{main_table}
-            SELECT * FROM {schema}.{temp_table};
+            INSERT INTO interseguror.plaft_transaccional
+            SELECT * FROM interseguror.plaft_transaccional_tmp;
         """
         execute_query_no_results(query_insert, 'pg')
-        logger.info(f"Datos recargados exitosamente en la tabla {schema}.{main_table}.")
+        logger.info(f"Datos recargados exitosamente en la tabla interseguror.plaft_transaccional.")
         
         registrar_log_interno('3.4. RECARGANDO TABLA - FIN', 2)
 
@@ -734,18 +648,14 @@ def usp_retro_det_add_aseg_soat():
 
     # 3.5. Verifica si existe la tabla PLAFT_TRANSACCIONAL_TMP y la elimina si existe
     try:
-        logger.info(f"Verificando existencia de la tabla temporal {schema}.{temp_table} para eliminarla.")
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
         
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            logger.info(f"La tabla {schema}.{temp_table} existe. Procediendo a eliminarla.")
-            query_drop_table = f"DROP TABLE IF EXISTS {schema}.{temp_table} CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
-            logger.info(f"Tabla {schema}.{temp_table} eliminada exitosamente.")
-        else:
-            logger.info(f"La tabla {schema}.{temp_table} no existe. No se requiere eliminación.")
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
+
+        logger.info(f"La tabla interseguror.plaft_transaccional_tmp ha sido truncada")
     except Exception as e:
-        logger.error(f"Error al verificar o eliminar la tabla temporal {schema}.{temp_table}: {e}")
+        logger.error(f"Error al truncar la tabla interseguror.plaft_transaccional_tmp: {e}")
         raise
 
     logger.info(f'usp_retro_det_add_aseg_soat - fin') 
@@ -755,48 +665,30 @@ def usp_retro_det_add_contra_pbi():
 
     logger.info(f'usp_retro_det_add_contra_pbi - inicio') 
 
-    schema = 'interseguror'
-    temp_table = 'tmp_polizas_sin_contra_pbip'
-    main_table = 'plaft_transaccional'
-
     try:
-        logger.info(f"Verificando existencia de la tabla {schema}.{temp_table}")
-        query_check_table = f"""
-            SELECT COUNT(1) 
-            FROM information_schema.tables 
-            WHERE table_schema = '{schema}' 
-              AND table_name = '{temp_table}';
-        """
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-        
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            logger.info(f"La tabla {schema}.{temp_table} existe. Procediendo a eliminarla.")
-            query_drop_table = f"DROP TABLE IF EXISTS {schema}.{temp_table} CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
-            logger.info(f"Tabla {schema}.{temp_table} eliminada exitosamente.")
-        else:
-            logger.info(f"La tabla {schema}.{temp_table} no existe. No se requiere eliminación.")
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
     except Exception as e:
-        logger.error(f"Error al verificar o eliminar la tabla {schema}.{temp_table}: {e}")
+        logger.error(f"Error al truncar la tabla interseguror.plaft_transaccional_tmp: {e}")
         raise
-
 
     try:
         logger.info("Iniciando carga temporal tmp_polizas_sin_contra_pbip - Inicio")
         
         query_create_temp = f"""
-            CREATE TABLE {schema}.{temp_table} as
+        INSERT INTO interseguror.plaft_transaccional_tmp
         select distinct t.numero_poliza
-        from   {schema}.{main_table} t
+        from   interseguror.plaft_transaccional t
         where  t.glosa_producto = 'ProtBlindajeIndividualPlus'
         except
         select distinct t.numero_poliza
-        from   {schema}.{main_table} t
+        from   interseguror.plaft_transaccional t
         where  t.glosa_producto = 'ProtBlindajeIndividualPlus'
                and t.tipo_cliente = 'CONTRATANTE';
         """
         execute_query_no_results(query_create_temp, 'pg')
-        logger.info(f"Tabla temporal {schema}.{temp_table} creada exitosamente.")
+        logger.info(f"Tabla temporal interseguror.plaft_transaccional_tmp cargada exitosamente.")
         
 
         logger.info("Carga temporal completada tmp_polizas_sin_contra_pbip - Fin")
@@ -806,10 +698,10 @@ def usp_retro_det_add_contra_pbi():
 
 
     try:
-        logger.info(f"Iniciando insercion data {schema}.{main_table} desde {schema}.{temp_table} - Inicio")
+        logger.info(f"Iniciando insercion data interseguror.plaft_transaccional desde interseguror.plaft_transaccional - Inicio")
         
         query_create_temp = f"""
-            insert into {schema}.{main_table}(
+            insert into interseguror.plaft_transaccional(
               id_rep_general              ,
               numero_poliza               ,
               linea_negocio               ,
@@ -895,15 +787,15 @@ def usp_retro_det_add_contra_pbi():
         monto_prima_total_soles     ,
         'R001',
         activo
-        from {schema}.{main_table} t
+        from interseguror.plaft_transaccional t
         where t.numero_poliza in
         ( select  p.numero_poliza
-          from    {schema}.{temp_table} p
+          from    interseguror.plaft_transaccional_tmp p
         );
         """
         execute_query_no_results(query_create_temp, 'pg')
         
-        logger.info(f"Iniciando insercion data {schema}.{main_table} desde {schema}.{temp_table} - Fin")
+        logger.info(f"Iniciando insercion data interseguror.plaft_transaccional desde interseguror.plaft_transaccional_tmp - Fin")
     except Exception as e:
         logger.error(f"Error durante la creación de la tabla temporal: {e}")
         raise
@@ -959,34 +851,19 @@ def usp_retro_det_poliza_matriz():
         logger.error(f"Error durante la insercion del log: {e}")
         raise
 
-
     try:
-        logger.info(f"Verificando existencia de la tabla {schema}.{table_tmp}")
-        query_check_table = f"""
-            SELECT COUNT(1) 
-            FROM information_schema.tables 
-            WHERE table_schema = '{schema}' 
-              AND table_name = '{table_tmp}';
-        """
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-        
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            logger.info(f"La tabla {schema}.{table_tmp} existe. Procediendo a eliminarla.")
-            query_drop_table = f"DROP TABLE IF EXISTS {schema}.{table_tmp} CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
-            logger.info(f"Tabla {schema}.{table_tmp} eliminada exitosamente.")
-        else:
-            logger.info(f"La tabla {schema}.{table_tmp} no existe. No se requiere eliminación.")
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
     except Exception as e:
-        logger.error(f"Error al verificar o eliminar la tabla {schema}.{table_tmp}: {e}")
+        logger.error(f"Error al truncar la tabla interseguror.plaft_transaccional_tmp: {e}")
         raise
-
 
     try:
         logger.info(f"Iniciando carga temporal {schema}.{table_tmp} - Inicio")
         
         query_create_temp = f"""
-            CREATE TABLE {schema}.{table_tmp} AS
+        INSERT INTO {schema}.{table_tmp}
         SELECT DISTINCT T.NUMERO_POLIZA_MATRIZ_EVAL, T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL
         FROM   {schema}.{table_main} T
         WHERE  T.NUMERO_POLIZA_MATRIZ_EVAL > 0
@@ -995,12 +872,12 @@ def usp_retro_det_poliza_matriz():
                AND T.ORIGEN <> 'EXCEL';
         """
         execute_query_no_results(query_create_temp, 'pg')
-        logger.info(f"Tabla temporal {schema}.{table_tmp} creada exitosamente.")
+        logger.info(f"Tabla temporal {schema}.{table_tmp} cargada exitosamente.")
         
 
         logger.info(f"Carga temporal completada {schema}.{table_tmp} - Fin")
     except Exception as e:
-        logger.error(f"Error durante la creación de la tabla temporal: {e}")
+        logger.error(f"Error durante la carga de la tabla temporal: {e}")
         raise
 
 
@@ -1188,23 +1065,12 @@ def usp_retro_det_calc_acti_econo():
     logger.info(f'usp_retro_det_calc_acti_econo - inicio') 
 
     try:
-        query_check_table = """
-        SELECT COUNT(1) 
-        FROM information_schema.tables 
-        WHERE table_schema = 'interseguror' 
-        AND table_name = 'tmp_actividad_ecomica_acsele';
-        """
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-
-        logger.info(f'Imprimiendo cantidad de registros check table {V_CANT_REG}') 
-
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            # Si la tabla existe, se elimina
-            query_drop_table = "DROP TABLE IF EXISTS interseguror.tmp_actividad_ecomica_acsele CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
+        logger.info(f"Truncando la tabla interseguror.tmp_actividad_ecomica_acsele")
+        query_truncate_table = "TRUNCATE TABLE interseguror.tmp_actividad_ecomica_acsele;"
+        execute_query_no_results(query_truncate_table, 'pg')
         
         query_create_temp = f"""
-            CREATE TABLE interseguror.tmp_actividad_ecomica_acsele as
+            INSERT INTO interseguror.tmp_actividad_ecomica_acsele
           select TRANSFORMADORFILAID as CODIGO, DESCRIPTION as DESCRIPCION
           from interseguro.transformadorfila where PROPERTYID = 3706454;
         """
@@ -1231,46 +1097,23 @@ def usp_retro_det_ini_valores():
     logger.info(f'usp_retro_det_ini_valores - inicio') 
 
     try:
-        query_check_table = """
-        SELECT COUNT(1) 
-        FROM information_schema.tables 
-        WHERE table_schema = 'interseguror' 
-        AND table_name = 'plaft_transaccional_tmp';
-        """
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
 
-        logger.info(f'Imprimiendo cantidad de registros check table {V_CANT_REG}') 
-
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            # Si la tabla existe, se elimina
-            query_drop_table = "DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
         
         query_alter_sequence = f"""
             alter sequence interseguror.seq_plaft_transaccional restart start with 1;
         """
         execute_query_no_results(query_alter_sequence, 'pg')    
-
-        query_insert_1 = f"""
-            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-inicices-inicio', '{ datetime.now() }');
-        """
-        execute_query_no_results(query_insert_1, 'pg')   
-
-        usp_limpiar_indices()
-
-        query_insert_2 = f"""
-            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-inicices-fin', '{ datetime.now() }');
-        """
-        execute_query_no_results(query_insert_2, 'pg')   
-
+ 
         query_insert_3 = f"""
             insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'paso-01', '{ datetime.now() }');
         """
         execute_query_no_results(query_insert_3, 'pg') 
 
         query_create_temp = f"""
-            CREATE TABLE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP
-            AS
+            INSERT INTO INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP
             SELECT
             NEXTVAL('INTERSEGUROR.SEQ_PLAFT_TRANSACCIONAL') as ID_REP_GENERAL ,
             NUMERO_POLIZA                ,
@@ -1365,20 +1208,9 @@ def usp_retro_det_ini_valores():
         """
         execute_query_no_results(query_insert_8, 'pg')
 
-        query_check_table_2 = """
-        SELECT COUNT(1) 
-        FROM information_schema.tables 
-        WHERE table_schema = 'interseguror' 
-        AND table_name = 'plaft_transaccional_tmp';
-        """
-        V_CANT_REG = execute_query_with_results(query_check_table_2, 'pg')
-
-        logger.info(f'Imprimiendo cantidad de registros check table {V_CANT_REG}') 
-
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            # Si la tabla existe, se elimina
-            query_drop_table = "DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
+        query_truncate_table_2 = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table_2, 'pg')
         
     except Exception as e:
         logger.error(f"Error en usp_retro_det_ini_valores: {str(e)}")
@@ -1443,20 +1275,6 @@ def usp_retro_det_val_tipo_y_num_doc():
     logger.info(f'usp_retro_det_val_tipo_y_num_doc - inicio') 
 
     try:
-        query_insert_1 = f"""
-            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-crear-inicices-inicio', '{ datetime.now() }');
-        """
-        execute_query_no_results(query_insert_1, 'pg')   
-
-        usp_limpiar_indices()
-
-        usp_crear_indices()
-
-        query_insert_2 = f"""
-            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-crear-inicices-fin', '{ datetime.now() }');
-        """
-        execute_query_no_results(query_insert_2, 'pg')
-
         update_transaccional_query_1 = f"""
             UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
             SET    COD_TIPO_DOCUMENTO_EVAL = 'DNI',REGLAS = CONCAT(T.REGLAS,'-','R002')
@@ -1619,26 +1437,15 @@ def usp_retro_det_val_nacionalidad():
     logger.info(f'usp_retro_det_val_nacionalidad - inicio') 
 
     try:
-        query_check_table = """
-            SELECT COUNT(1) 
-            FROM information_schema.tables 
-            WHERE table_schema = 'interseguror' 
-            AND table_name = 'plaft_transaccional_tmp';
-        """
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
 
-        logger.info(f'Imprimiendo cantidad de registros check table {V_CANT_REG}') 
-
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            query_drop_table = "DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
 
         query_insert_1 = f"""
             insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-indices-inicio', '{ datetime.now() }');
         """
         execute_query_no_results(query_insert_1, 'pg')   
-
-        usp_limpiar_indices()
 
         query_insert_2 = f"""
             insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-indices-fin', '{ datetime.now() }');
@@ -1651,8 +1458,8 @@ def usp_retro_det_val_nacionalidad():
         execute_query_no_results(query_insert_3, 'pg')
 
         query_create_table = """
-            CREATE TABLE interseguror.plaft_transaccional_tmp 
-            AS SELECT
+            INSERT INTO INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP
+            SELECT
                 id_rep_general               ,
                 numero_poliza                ,
                 linea_negocio                ,
@@ -1730,10 +1537,9 @@ def usp_retro_det_val_nacionalidad():
         """
         execute_query_no_results(query_insert_data, 'pg')
 
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            query_drop_table = "DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
+        query_truncate_table = "TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
 
     except Exception as e:
         logger.error(f"Error en usp_retro_det_val_nacionalidad: {str(e)}")
@@ -1771,44 +1577,14 @@ def usp_retro_det_val_departamento():
         schema = 'interseguror'
     
         for table_name in table_names:
-            logger.info(f"Verificando existencia de la tabla: {schema}.{table_name}")
-            
-            query_check_table = f"""
-                SELECT COUNT(1) 
-                FROM information_schema.tables 
-                WHERE table_schema = '{schema}' 
-                AND table_name = '{table_name}';
-            """
-            
-            V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-            
-            if V_CANT_REG and V_CANT_REG[0][0] > 0:
-                logger.info(f"La tabla {schema}.{table_name} existe. Procediendo a eliminarlo.")
+           
+            logger.info(f"Truncando la tabla {schema}.{table_name}")
+            query_truncate_table = f"TRUNCATE TABLE {schema}.{table_name};"
+            execute_query_no_results(query_truncate_table, 'pg')
 
-                query_drop_table = f"DROP TABLE IF EXISTS {schema}.{table_name} CASCADE;"
-                
-                execute_query_no_results(query_drop_table, 'pg')
-                
-                logger.info(f"Tabla {schema}.{table_name} eliminada exitosamente.")
-            else:
-                logger.info(f"La tabla {schema}.{table_name} no existe. No se requiere eliminación.")
-
-
-        query_insert_1 = f"""
-            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-inicices-inicio', '{ datetime.now() }');
-        """
-        execute_query_no_results(query_insert_1, 'pg')   
-
-        usp_limpiar_indices()
-
-        query_insert_2 = f"""
-            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'limpiar-inicices-fin', '{ datetime.now() }');
-        """
-        execute_query_no_results(query_insert_2, 'pg') 
 
         query_create_table_1 = """
-            CREATE TABLE INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP
-            AS
+            INSERT INTO INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP
             SELECT
             ID_REP_GENERAL               ,
             NUMERO_POLIZA                ,
@@ -1879,8 +1655,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_insert_3, 'pg') 
 
         query_create_table_2 = """
-            CREATE TABLE INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_01
-            AS
+            INSERT INTO INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_01
             SELECT DISTINCT T3.NUMERO_DOCUMENTO_EVAL, T3.DEPARTAMENTO_EVAL, T3.FEC_INICIO_VIGENCIA
                 FROM INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T3
             INNER JOIN
@@ -1914,8 +1689,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_insert_4, 'pg')
 
         query_create_table_3 = """
-            CREATE TABLE INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_02
-            AS
+            INSERT INTO INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_02
             SELECT T.NUMERO_DOCUMENTO_EVAL, T.DEPARTAMENTO_EVAL,
                     ROW_NUMBER() OVER(PARTITION BY  T.NUMERO_DOCUMENTO_EVAL  ORDER BY T.NUMERO_DOCUMENTO_EVAL) AS NRO
             FROM   INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_01 T;
@@ -1928,8 +1702,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_insert_5, 'pg')
 
         query_create_table_4 = """
-            CREATE TABLE INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_03
-            AS
+            INSERT INTO INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_03
             select * from INTERSEGUROR.TMP_DEPARTAMENTO_UNICO_02 where NRO = 1;
         """
         execute_query_no_results(query_create_table_4, 'pg')
@@ -1952,8 +1725,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_insert_7, 'pg')
 
         query_create_table_6 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO
             select distinct numero_poliza
             from(
             select T1.NUMERO_POLIZA, count(distinct T1.DEPARTAMENTO_EVAL) as CANTIDAD
@@ -1971,8 +1743,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_6, 'pg')
 
         query_create_table_7 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO_UNICO
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO_UNICO
             SELECT  T.NUMERO_POLIZA, COUNT(DISTINCT T.DEPARTAMENTO_EVAL) AS CANTIDAD FROM
             INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
             INNER JOIN INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO  TD ON T.NUMERO_POLIZA = TD.NUMERO_POLIZA
@@ -1983,8 +1754,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_7, 'pg')
 
         query_create_table_8 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO_UNICO_UPD
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO_UNICO_UPD
             SELECT DISTINCT U.NUMERO_POLIZA, T.DEPARTAMENTO_EVAL
             FROM   INTERSEGUROR.TMP_PLAFT_POLIZAS_DEPARTAMENTO_UNICO U
                 INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T ON U.NUMERO_POLIZA = T.NUMERO_POLIZA
@@ -2004,8 +1774,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_insert_8, 'pg')
 
         query_create_table_10 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_01
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_01
             select distinct numero_poliza
             from(
             select T1.NUMERO_POLIZA, count(distinct T1.DEPARTAMENTO_EVAL) as CANTIDAD
@@ -2023,8 +1792,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_10, 'pg')
 
         query_create_table_11 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_01
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_01
             SELECT  T.NUMERO_POLIZA, max(T.ID_REP_GENERAL) as ID_REP_GENERAL
             FROM    INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
                     INNER JOIN INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_01 TD ON T.NUMERO_POLIZA = TD.NUMERO_POLIZA
@@ -2034,8 +1802,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_11, 'pg')
 
         query_create_table_12 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_UPD_01
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_UPD_01
             SELECT DISTINCT U.NUMERO_POLIZA, T.DEPARTAMENTO_EVAL
             FROM   INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_01 U
                 INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T ON U.NUMERO_POLIZA = T.NUMERO_POLIZA
@@ -2051,8 +1818,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_13, 'pg')
 
         query_create_table_14 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_10
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_10
             select distinct numero_poliza
             from(
             select T1.NUMERO_POLIZA, count(distinct T1.DEPARTAMENTO_EVAL) as CANTIDAD
@@ -2068,8 +1834,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_14, 'pg')
 
         query_create_table_15 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_10
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_10
             SELECT  T.NUMERO_POLIZA, max(T.ID_REP_GENERAL) as ID_REP_GENERAL
             FROM    INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
                     INNER JOIN INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_10 TD ON T.NUMERO_POLIZA = TD.NUMERO_POLIZA
@@ -2079,8 +1844,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_15, 'pg')
 
         query_create_table_16 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_UPD_10
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_UPD_10
             SELECT DISTINCT U.NUMERO_POLIZA, T.DEPARTAMENTO_EVAL
             FROM   INTERSEGUROR.TMP_PLAFT_POLIZAS_DEP_UNICO_10 U
                 INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T ON U.NUMERO_POLIZA = T.NUMERO_POLIZA
@@ -2101,8 +1865,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_insert_9, 'pg')
 
         query_create_table_18 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA
             SELECT COD_TIPO_DOCUMENTO_EVAL, NUMERO_DOCUMENTO_EVAL FROM(
             SELECT T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL, COUNT(1)
             FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
@@ -2114,8 +1877,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_18, 'pg')
 
         query_create_table_19 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA_01
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA_01
             SELECT DISTINCT T.NUMERO_POLIZA, T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL, CAST('NINGUNO' AS VARCHAR(50)) AS DEPARTAMENTO_EVAL
             FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
                 INNER JOIN INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA D ON
@@ -2124,8 +1886,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_19, 'pg')
 
         query_create_table_20 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_NUM_POLIZAS_SIN_DEPA
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_NUM_POLIZAS_SIN_DEPA
             SELECT DISTINCT T.NUMERO_POLIZA
             FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
                 INNER JOIN INTERSEGUROR.TMP_PLAFT_CLIENTES_SIN_DEPA D ON
@@ -2134,8 +1895,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_create_table_20, 'pg')
 
         query_create_table_21 = """
-            CREATE TABLE INTERSEGUROR.TMP_PLAFT_NUM_POLIZAS_UPD_DEPA
-            AS
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_NUM_POLIZAS_UPD_DEPA
             SELECT DISTINCT T.NUMERO_POLIZA, T.DEPARTAMENTO_EVAL
             FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
                 INNER JOIN INTERSEGUROR.TMP_PLAFT_NUM_POLIZAS_SIN_DEPA D ON T.NUMERO_POLIZA = D.NUMERO_POLIZA
@@ -2170,8 +1930,7 @@ def usp_retro_det_val_departamento():
         execute_query_no_results(query_insert_11, 'pg')
 
         query_create_table_24 = """
-            CREATE TABLE INTERSEGUROR.PLAFT_TMP_VEHI_SIN_DEPA
-            AS
+            INSERT INTO INTERSEGUROR.PLAFT_TMP_VEHI_SIN_DEPA
             SELECT T.ID_REP_GENERAL FROM INTERSEGUROR.PLAFT_TRANSACCIONAL_TMP T
             WHERE T.COD_RAMO = '21.0' AND T.COD_SUBRAMO = '1.0' AND T.COD_PRODUCTO = '66.0'
             AND T.DEPARTAMENTO_EVAL = 'NINGUNO';
@@ -2246,52 +2005,19 @@ def usp_retro_det_val_departamento():
         schema = 'interseguror'
     
         for table_name in table_names_delete:
-            logger.info(f"Verificando existencia de la tabla: {schema}.{table_name}")
             
-            query_check_table = f"""
-                SELECT COUNT(1) 
-                FROM information_schema.tables 
-                WHERE table_schema = '{schema}' 
-                AND table_name = '{table_name}';
-            """
-            
-            V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-            
-            if V_CANT_REG and V_CANT_REG[0][0] > 0:
-                logger.info(f"La tabla {schema}.{table_name} existe. Procediendo a eliminarlo.")
-
-                query_drop_table = f"DROP TABLE IF EXISTS {schema}.{table_name} CASCADE;"
-                
-                execute_query_no_results(query_drop_table, 'pg')
-                
-                logger.info(f"Tabla {schema}.{table_name} eliminada exitosamente.")
-            else:
-                logger.info(f"La tabla {schema}.{table_name} no existe. No se requiere eliminación.")
+            logger.info(f"Truncando la tabla {schema}.{table_name}")
+            query_truncate_table = f"TRUNCATE TABLE {schema}.{table_name};"
+            execute_query_no_results(query_truncate_table, 'pg')
 
         query_insert_16 = f"""
             insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'departamento4-FIN', '{ datetime.now() }');
         """
         execute_query_no_results(query_insert_16, 'pg')
 
-        query_check_table = f"""
-                SELECT COUNT(1) 
-                FROM information_schema.tables 
-                WHERE table_schema = 'interseguror' 
-                AND table_name = 'plaft_transaccional_tmp';
-            """
-            
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-        
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            logger.info(f"La tabla interseguror.plaft_transaccional_tmp existe. Procediendo a eliminarlo.")
-
-            query_drop_table = f"DROP TABLE IF EXISTS interseguror.plaft_transaccional_tmp CASCADE;"
-            
-            execute_query_no_results(query_drop_table, 'pg')
-            
-            logger.info(f"Tabla interseguror.plaft_transaccional_tmp eliminada exitosamente.")
-        else:
-            logger.info(f"La tabla interseguror.plaft_transaccional_tmp no existe. No se requiere eliminación.")
+        logger.info(f"Truncando la tabla interseguror.plaft_transaccional_tmp")
+        query_truncate_table = f"TRUNCATE TABLE interseguror.plaft_transaccional_tmp;"
+        execute_query_no_results(query_truncate_table, 'pg')
 
         query_insert_17 = f"""
             insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'FIN-FIN', '{ datetime.now() }');
@@ -2310,12 +2036,6 @@ def usp_retro_det_val_prod_riesgo():
     logger.info(f'usp_retro_det_val_prod_riesgo - inicio') 
 
     try:
-        registrar_log_interno('12.1 LIMPIAR INDICES', 2) 
-
-        usp_crear_indices()
-
-        registrar_log_interno('12.2 OBTENER IDENTIFICADOR DE PRODUCTO', 2) 
-
         update_transaccional_query_1 = f"""
             UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
             set ID_PRODUCTO_KEY = PP.ID_PRODUCTO_KEY,ID_RIESGO_SBS = PP.ID_RIESGO_SBS
@@ -2441,17 +2161,9 @@ def usp_retro_det_val_regimen():
         """
         execute_query_no_results(query_insert_1, 'pg')   
 
-        query_check_table = """
-            SELECT COUNT(1) 
-            FROM information_schema.tables 
-            WHERE table_schema = 'interseguror' 
-            AND table_name = 'tmp_clientes_maximo_regimen';
-        """
-        V_CANT_REG = execute_query_with_results(query_check_table, 'pg')
-
-        if V_CANT_REG and V_CANT_REG[0][0] > 0:
-            query_drop_table = "DROP TABLE IF EXISTS interseguror.tmp_clientes_maximo_regimen CASCADE;"
-            execute_query_no_results(query_drop_table, 'pg')
+        logger.info(f"Truncando la tabla interseguror.tmp_clientes_maximo_regimen")
+        query_truncate_table = f"TRUNCATE TABLE interseguror.tmp_clientes_maximo_regimen;"
+        execute_query_no_results(query_truncate_table, 'pg')
 
         query_insert_2 = f"""
             insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'USP_RETRO_DET_VAL_REGIMEN - 01', '{ datetime.now() }');
@@ -2553,8 +2265,7 @@ def usp_retro_det_val_regimen():
         execute_query_no_results(query_insert_5, 'pg') 
 
         query_create_table = """
-            CREATE TABLE INTERSEGUROR.TMP_CLIENTES_MAXIMO_REGIMEN
-            AS
+            INSERT INTO INTERSEGUROR.TMP_CLIENTES_MAXIMO_REGIMEN
             SELECT T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL, MAX(T.ID_REGIMEN_EVAL) AS ID_REGIMEN_EVAL
             FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL T
             WHERE  T.ACTIVO = 1
