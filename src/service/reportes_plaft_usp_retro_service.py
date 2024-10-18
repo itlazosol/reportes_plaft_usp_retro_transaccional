@@ -1,9 +1,4 @@
 from ..repository.reportes_plaft_usp_retro_repository import (
-    obtener_polizas_alloy,
-    obtener_polizas_sme,
-    insertar_polizas_temporal,
-    limpiar_temporal,
-    update_impmas_desde_temp,
     registrar_log_interno,
     update_actividad_economica_transaccional,
     usp_retro_det_activo,
@@ -17,7 +12,13 @@ from ..repository.reportes_plaft_usp_retro_repository import (
     actualizar_riesgo_sbs,
     evaluar_montos_dobles,
     calcular_prima,
-    excluir_polizas    
+    excluir_polizas,
+    usp_retro_det_val_tipo_y_num_doc,
+    usp_retro_det_val_nacionalidad,
+    usp_retro_det_val_departamento,
+    usp_retro_det_val_prod_riesgo,
+    usp_retro_det_val_tipo_persona,
+    usp_retro_det_val_regimen
 )
 import pandas as pd
 from ..utils.logger import logger
@@ -77,22 +78,64 @@ def reportes_plaft_usp_retro_acsele_service():
 
     registrar_log_interno("8. DESACTIVAR ASEGURDADOS PREVICIONALES - FIN")
 
+    registrar_log_interno("9. EVALUAR TIPO Y NUMERO DE DOCUMENTO - INICIO")
 
+    usp_retro_det_val_tipo_y_num_doc()
+
+    registrar_log_interno("9. EVALUAR TIPO Y NUMERO DE DOCUMENTO - FIN")
+
+    registrar_log_interno("10. EVALUAR NACIONALIDAD - INICIO")
+
+    usp_retro_det_val_nacionalidad()
+
+    registrar_log_interno("10. EVALUAR NACIONALIDAD - FIN")
+
+    registrar_log_interno("11. EVALUAR DEPARTAMENTO - INICIO")
+
+    usp_retro_det_val_departamento()
+
+    registrar_log_interno("11. EVALUAR DEPARTAMENTO - FIN")
+
+    registrar_log_interno("12. EVALUAR PRODUCTO - INICIO")
+
+    usp_retro_det_val_prod_riesgo()
+
+    registrar_log_interno("12. EVALUAR PRODUCTO - FIN")
+
+    registrar_log_interno("13. EVALUAR PERSONA NATURAL - INICIO")
+
+    usp_retro_det_val_tipo_persona()
+
+    registrar_log_interno("13. EVALUAR PERSONA NATURAL - FIN")
+
+    registrar_log_interno("14. EVALUAR REGIMEN - INICIO")
+
+    usp_retro_det_val_regimen()
+
+    registrar_log_interno("14. EVALUAR REGIMEN - FIN")
 
     registrar_log_interno("17. EXCLUIR POLIZAS - INICIO")
+
     excluir_polizas()
+
     registrar_log_interno("17. EXCLUIR POLIZAS - FIN")
     
     registrar_log_interno("19. CALCULAR PRIMA - INICIO")
+
     calcular_prima()
+
     registrar_log_interno("19. CALCULAR PRIMA - FIN")
     
     registrar_log_interno("20. EVALUAR MONTOS DOBLES - INICIO")
+
     evaluar_montos_dobles()
+
     registrar_log_interno("20. EVALUAR MONTOS DOBLES - FIN")
     
     registrar_log_interno("21. ACTUALIZAR RIESGO SBS DESG.INDIV - INICIO")
+
     actualizar_riesgo_sbs()
+    
     registrar_log_interno("21. ACTUALIZAR RIESGO SBS DESG.INDIV - FIN")
     
     registrar_log_interno("USP_RETRO_TRANSACCIONAL - FIN")
