@@ -9,16 +9,18 @@ from ..repository.reportes_plaft_usp_retro_repository import (
     usp_retro_det_calc_acti_econo,
     usp_retro_det_ini_valores,
     usp_retro_desactivar_aseg_previ,
-    actualizar_riesgo_sbs,
-    evaluar_montos_dobles,
-    calcular_prima,
-    excluir_polizas,
     usp_retro_det_val_tipo_y_num_doc,
     usp_retro_det_val_nacionalidad,
     usp_retro_det_val_departamento,
     usp_retro_det_val_prod_riesgo,
     usp_retro_det_val_tipo_persona,
-    usp_retro_det_val_regimen
+    usp_retro_det_val_regimen,
+    usp_retro_det_val_acti_econo,
+    usp_retro_calcular_periodo_temporal,
+    excluir_polizas,
+    calcular_prima,
+    evaluar_montos_dobles,
+    actualizar_riesgo_sbs
 )
 import pandas as pd
 from ..utils.logger import logger
@@ -114,6 +116,18 @@ def reportes_plaft_usp_retro_acsele_service():
 
     registrar_log_interno("14. EVALUAR REGIMEN - FIN")
 
+    registrar_log_interno("15. EVALUAR ACTIVIAD ECONOMICA - INICIO")
+
+    usp_retro_det_val_acti_econo()
+
+    registrar_log_interno("15. EVALUAR ACTIVIAD ECONOMICA - FIN")
+
+    registrar_log_interno("16. CALCULAR PERIODO - INICIO")
+
+    usp_retro_calcular_periodo_temporal()
+
+    registrar_log_interno("16. CALCULAR PERIODO - FIN")
+
     registrar_log_interno("17. EXCLUIR POLIZAS - INICIO")
 
     excluir_polizas()
@@ -135,7 +149,7 @@ def reportes_plaft_usp_retro_acsele_service():
     registrar_log_interno("21. ACTUALIZAR RIESGO SBS DESG.INDIV - INICIO")
 
     actualizar_riesgo_sbs()
-    
+
     registrar_log_interno("21. ACTUALIZAR RIESGO SBS DESG.INDIV - FIN")
     
     registrar_log_interno("USP_RETRO_TRANSACCIONAL - FIN")

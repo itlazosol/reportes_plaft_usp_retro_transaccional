@@ -75,88 +75,6 @@ def registrar_log_interno(p_observacion, p_nivel=1):
 
     return True
 
-
-def usp_limpiar_indices():
-
-    logger.info(f'usp_limpiar_indices - inicio') 
-
-    # Lista de nombres de índices a verificar y eliminar si existen
-    index_names = [
-        'idx_plf_trans_01',
-        'idx_plf_trans_02',
-        'idx_plf_trans_03',
-        'idx_plf_trans_04',
-        'idx_plf_trans_05',
-        'idx_plf_trans_06',
-        'idx_plf_trans_07',
-        'idx_plf_trans_08',
-        'idx_plf_trans_09'
-    ]
-    
-    # Esquema donde se encuentran los índices
-    schema = 'interseguror'
-    
-    for index_name in index_names:
-        try:
-            logger.info(f"Verificando existencia del índice: {schema}.{index_name}")
-            
-            # Consulta para verificar si el índice existe utilizando pg_indexes
-            query_check_index = f"""
-                SELECT COUNT(1) 
-                FROM pg_indexes 
-                WHERE schemaname = '{schema}' 
-                  AND indexname = '{index_name}';
-            """
-            
-            # Ejecutar la consulta y obtener el resultado
-            V_CANT_REG = execute_query_with_results(query_check_index, 'pg')
-            
-            # Verificar si el índice existe
-            if V_CANT_REG and V_CANT_REG[0][0] > 0:
-                logger.info(f"El índice {schema}.{index_name} existe. Procediendo a eliminarlo.")
-                
-                # Consulta para eliminar el índice
-                query_drop_index = f"DROP INDEX {schema}.{index_name};"
-                
-                # Ejecutar la consulta de eliminación
-                execute_query_no_results(query_drop_index, 'pg')
-                
-                logger.info(f"Índice {schema}.{index_name} eliminado exitosamente.")
-            else:
-                logger.info(f"El índice {schema}.{index_name} no existe. No se requiere eliminación.")
-        
-        except Exception as e:
-            logger.error(f"Error al procesar el índice {schema}.{index_name}: {e}")
-            continue
-    
-    logger.info(f'usp_limpiar_indices - fin') 
-
-
-def usp_crear_indices():
-
-    logger.info('Ejecutando función para crear índices en interseguror.plaft_transaccional')
-    
-    # Lista de scripts que representan las consultas para crear índices
-    scripts = [
-        'create index idx_plf_trans_01 on interseguror.plaft_transaccional (departamento_eval)',
-        'create index idx_plf_trans_02 on interseguror.plaft_transaccional (numero_documento_EVAL)',
-        'create index idx_plf_trans_03 on interseguror.plaft_transaccional (id_departamento)',
-        'create index idx_plf_trans_04 on interseguror.plaft_transaccional (cod_tipo_documento_eval)',
-        'create index idx_plf_trans_05 on interseguror.plaft_transaccional (cod_tipo_documento_eval, numero_documento_eval)'
-    ]
-    
-    # Ejecutar cada script usando el método execute_query_no_results
-    for script in scripts:
-        try:
-            logger.info(f'Ejecutando script: {script}')
-            execute_query_no_results(script, 'pg')
-        except Exception as e:
-            logger.error(f'Error al ejecutar script: {script}, Error: {str(e)}')
-            raise e
-
-    logger.info('Todos los índices se han creado correctamente.')
-
-
 def update_actividad_economica_transaccional():
     logger.info(f'update_actividad_economica_transaccional - inicio') 
 
@@ -1288,7 +1206,7 @@ def excluir_polizas():
     ]
 
     for tabla in temp_tablas:
-        execute_query_no_results("TRUNCATE TABLE " + tabla + ";",'pg')
+        execute_query_no_results(f"TRUNCATE TABLE interseguror.{tabla};",'pg')
     
     # Insertar en PLAFT_TMP_POLIZAS_NO_VALIDAR_1
     insert_plaft_tmp_pol_no_val_1 = """
@@ -1355,7 +1273,7 @@ def excluir_polizas():
     execute_query_no_results(insert_plaft_tmp_pol_no_val_5, 'pg')
 
     insert_plaft_tmp_pol_exclu = """
-        CREATE TABLE interseguror.PLAFT_POLIZAS_EXCLUIDOS AS
+        INSERT INTO interseguror.PLAFT_POLIZAS_EXCLUIDOS
         SELECT DISTINCT T.NUMERO_POLIZA, 'TIPO DOCUMENTO NULO' AS OBSERVACION FROM interseguror.PLAFT_TRANSACCIONAL T
         WHERE T.COD_TIPO_DOCUMENTO_EVAL IS NULL
         UNION
@@ -1515,18 +1433,24 @@ def excluir_polizas():
     logger.info('excluir_polizas - fin')
 
 def calcular_prima():
-    logger.info('calcular_prima - inicio')
-    sql1=f"UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T2 SET MONTO_PRIMA_TOTAL =( SELECT CASE WHEN P.CALCULO_PRIMA = 1 THEN T.MONTO_PRIMA WHEN P.CALCULO_PRIMA = 2 AND COALESCE(F.MESES_PERIODO, 0) <> 0 THEN T.MONTO_PRIMA * 12 / F.MESES_PERIODO WHEN P.CALCULO_PRIMA = 3 AND COALESCE(F.MESES_PERIODO, 0) <> 0 THEN T.MONTO_PRIMA * T.PERIODO_PAGO * 12 / F.MESES_PERIODO WHEN P.CALCULO_PRIMA = 4 AND COALESCE(F.MESES_PERIODO, 0) <> 0 THEN T.MONTO_PRIMA * (100 - T.EDAD_ACTUARIAL) * 12 / F.MESES_PERIODO WHEN P.CALCULO_PRIMA = 5 THEN T.MONTO_PRIMA_RECAUDADA END FROM INTERSEGUROR.PLAFT_TRANSACCIONAL T JOIN INTERSEGUROR.PLAFT_D_PRODUCTO P ON T.COD_RAMO = P.COD_RAMO AND COALESCE(T.COD_SUBRAMO, '0') = COALESCE(P.COD_SUBRAMO, '0') AND COALESCE(T.COD_PRODUCTO, '0') = COALESCE(P.COD_PRODUCTO, '0') LEFT JOIN INTERSEGUROR.PLAFT_FRECUENCIA_PAGO F ON UPPER(T.COD_FRECUENCIA_PAGO) = UPPER(F.FRECUENCIA) WHERE T.ACTIVO = 1 AND T2.ACTIVO = 1 AND T2.NUMERO_POLIZA = T.NUMERO_POLIZA AND T2.NUMERO_DOCUMENTO_EVAL = T.NUMERO_DOCUMENTO_EVAL AND T2.COD_TIPO_DOCUMENTO_EVAL = T.COD_TIPO_DOCUMENTO_EVAL AND T2.TIPO_CLIENTE = T.TIPO_CLIENTE AND T2.ACTIVO = 1) WHERE T2.ACTIVO = 1;"
-    sql3=f"UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T SET MONTO_PRIMA_TOTAL_SOLES = T.MONTO_PRIMA_TOTAL WHERE T.COD_MONEDA = 'PEN';"
-    sqlTipoCambio=f"WITH FechaCorte AS( SELECT TP.FECHA_CORTE FROM ( SELECT * FROM INTERSEGUROR.PLAFT_LOG_PROCESO ORDER BY 1 DESC) TP LIMIT 1 ), TipoCambio AS ( SELECT COUNT(DISTINCT VTC.RATE) AS CANT_TIPO_CAMBIO, CASE WHEN COUNT(DISTINCT VTC.RATE) > 0 THEN ( SELECT DISTINCT VTC.RATE FROM INTERSEGURO.VIEW_TIPO_CAMBIO_DIARIO VTC INNER JOIN SAMP.EQUIVALENCIAS E1 ON VTC.MONEDAINIVAL = CAST(NULLIF(E1.ACSELE, '') AS DECIMAL(19,0)) AND E1.TIPO = 'MONEDA' WHERE E1.CANONICA = 'USD' AND TO_CHAR(VTC.FECHA, 'YYYYMMDD') = TO_CHAR((SELECT FECHA_CORTE FROM FechaCorte), 'YYYYMMDD') ) ELSE ( SELECT DISTINCT VTC.RATE FROM INTERSEGURO.VIEW_TIPO_CAMBIO_DIARIO VTC INNER JOIN SAMP.EQUIVALENCIAS E1 ON VTC.MONEDAINIVAL = CAST(NULLIF(E1.ACSELE, '') AS DECIMAL(19,0)) AND E1.TIPO = 'MONEDA' WHERE E1.CANONICA = 'USD' AND TO_CHAR(VTC.FECHA, 'YYYYMMDD') = ( SELECT TO_CHAR(MAX(VTC.FECHA), 'YYYYMMDD') FROM INTERSEGURO.VIEW_TIPO_CAMBIO_DIARIO VTC INNER JOIN SAMP.EQUIVALENCIAS E1 ON VTC.MONEDAINIVAL = CAST(E1.ACSELE AS DOUBLE PRECISION) AND E1.TIPO = 'MONEDA' WHERE E1.CANONICA = 'USD' ) ) END AS TIPO_CAMBIO FROM INTERSEGURO.VIEW_TIPO_CAMBIO_DIARIO VTC INNER JOIN SAMP.EQUIVALENCIAS E1 ON VTC.MONEDAINIVAL = CAST(NULLIF(E1.ACSELE, '') AS DECIMAL(19,0)) AND E1.TIPO = 'MONEDA' WHERE E1.CANONICA = 'USD' AND TO_CHAR(VTC.FECHA, 'YYYYMMDD') = TO_CHAR((SELECT FECHA_CORTE FROM FechaCorte), 'YYYYMMDD') ) SELECT TIPO_CAMBIO FROM TipoCambio; "
-    ga=execute_query_to_df(sqlTipoCambio,'pg')
-    tipo_cambio=ga.iloc[0, 0]
-    sql4=f"UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T SET MONTO_PRIMA_TOTAL_SOLES = T.MONTO_PRIMA_TOTAL * {tipo_cambio} WHERE T.COD_MONEDA = 'USD';"
-    res=execute_query_with_results(sql1,'pg')
-    res=execute_query_with_results(sql3,'pg')
-    res=execute_query_with_results(sql4,'pg')
-    logger.info('calcular_prima - fin')
-    return res
+
+    try:
+        logger.info('calcular_prima - inicio')
+        sql1=f"UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T2 SET MONTO_PRIMA_TOTAL =( SELECT CASE WHEN P.CALCULO_PRIMA = 1 THEN T.MONTO_PRIMA WHEN P.CALCULO_PRIMA = 2 AND COALESCE(F.MESES_PERIODO, 0) <> 0 THEN T.MONTO_PRIMA * 12 / F.MESES_PERIODO WHEN P.CALCULO_PRIMA = 3 AND COALESCE(F.MESES_PERIODO, 0) <> 0 THEN T.MONTO_PRIMA * T.PERIODO_PAGO * 12 / F.MESES_PERIODO WHEN P.CALCULO_PRIMA = 4 AND COALESCE(F.MESES_PERIODO, 0) <> 0 THEN T.MONTO_PRIMA * (100 - T.EDAD_ACTUARIAL) * 12 / F.MESES_PERIODO WHEN P.CALCULO_PRIMA = 5 THEN T.MONTO_PRIMA_RECAUDADA END FROM INTERSEGUROR.PLAFT_TRANSACCIONAL T JOIN INTERSEGUROR.PLAFT_D_PRODUCTO P ON T.COD_RAMO = P.COD_RAMO AND COALESCE(T.COD_SUBRAMO, '0') = COALESCE(P.COD_SUBRAMO, '0') AND COALESCE(T.COD_PRODUCTO, '0') = COALESCE(P.COD_PRODUCTO, '0') LEFT JOIN INTERSEGUROR.PLAFT_FRECUENCIA_PAGO F ON UPPER(T.COD_FRECUENCIA_PAGO) = UPPER(F.FRECUENCIA) WHERE T.ACTIVO = 1 AND T2.ACTIVO = 1 AND T2.NUMERO_POLIZA = T.NUMERO_POLIZA AND T2.NUMERO_DOCUMENTO_EVAL = T.NUMERO_DOCUMENTO_EVAL AND T2.COD_TIPO_DOCUMENTO_EVAL = T.COD_TIPO_DOCUMENTO_EVAL AND T2.TIPO_CLIENTE = T.TIPO_CLIENTE AND T2.ACTIVO = 1) WHERE T2.ACTIVO = 1;"
+        sql3=f"UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T SET MONTO_PRIMA_TOTAL_SOLES = T.MONTO_PRIMA_TOTAL WHERE T.COD_MONEDA = 'PEN';"
+        sqlTipoCambio=f"WITH FechaCorte AS( SELECT TP.FECHA_CORTE FROM ( SELECT * FROM INTERSEGUROR.PLAFT_LOG_PROCESO ORDER BY 1 DESC) TP LIMIT 1 ), TipoCambio AS ( SELECT COUNT(DISTINCT VTC.RATE) AS CANT_TIPO_CAMBIO, CASE WHEN COUNT(DISTINCT VTC.RATE) > 0 THEN ( SELECT DISTINCT VTC.RATE FROM INTERSEGURO.VIEW_TIPO_CAMBIO_DIARIO VTC INNER JOIN SAMP.EQUIVALENCIAS E1 ON VTC.MONEDAINIVAL = CAST(NULLIF(E1.ACSELE, '') AS DECIMAL(19,0)) AND E1.TIPO = 'MONEDA' WHERE E1.CANONICA = 'USD' AND TO_CHAR(VTC.FECHA, 'YYYYMMDD') = TO_CHAR((SELECT FECHA_CORTE FROM FechaCorte), 'YYYYMMDD') ) ELSE ( SELECT DISTINCT VTC.RATE FROM INTERSEGURO.VIEW_TIPO_CAMBIO_DIARIO VTC INNER JOIN SAMP.EQUIVALENCIAS E1 ON VTC.MONEDAINIVAL = CAST(NULLIF(E1.ACSELE, '') AS DECIMAL(19,0)) AND E1.TIPO = 'MONEDA' WHERE E1.CANONICA = 'USD' AND TO_CHAR(VTC.FECHA, 'YYYYMMDD') = ( SELECT TO_CHAR(MAX(VTC.FECHA), 'YYYYMMDD') FROM INTERSEGURO.VIEW_TIPO_CAMBIO_DIARIO VTC INNER JOIN SAMP.EQUIVALENCIAS E1 ON VTC.MONEDAINIVAL = CAST(E1.ACSELE AS DOUBLE PRECISION) AND E1.TIPO = 'MONEDA' WHERE E1.CANONICA = 'USD' ) ) END AS TIPO_CAMBIO FROM INTERSEGURO.VIEW_TIPO_CAMBIO_DIARIO VTC INNER JOIN SAMP.EQUIVALENCIAS E1 ON VTC.MONEDAINIVAL = CAST(NULLIF(E1.ACSELE, '') AS DECIMAL(19,0)) AND E1.TIPO = 'MONEDA' WHERE E1.CANONICA = 'USD' AND TO_CHAR(VTC.FECHA, 'YYYYMMDD') = TO_CHAR((SELECT FECHA_CORTE FROM FechaCorte), 'YYYYMMDD') ) SELECT TIPO_CAMBIO FROM TipoCambio; "
+        ga=execute_query_to_df(sqlTipoCambio,'pg')
+        tipo_cambio=ga.iloc[0, 0]
+        sql4=f"UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T SET MONTO_PRIMA_TOTAL_SOLES = T.MONTO_PRIMA_TOTAL * {tipo_cambio} WHERE T.COD_MONEDA = 'USD';"
+        res=execute_query_no_results(sql1,'pg')
+        res=execute_query_no_results(sql3,'pg')
+        res=execute_query_with_results(sql4,'pg')
+        logger.info('calcular_prima - fin')
+        return res
+
+    except Exception as e:
+        logger.error(f"Error en calcular_prima: {str(e)}")
+        raise
 
 def evaluar_montos_dobles():
     logger.info('evaluar_montos_dobles - inicio')
@@ -2559,3 +2483,284 @@ def usp_retro_det_val_regimen():
         raise
 
     logger.info(f'usp_retro_det_val_regimen - fin') 
+
+def usp_retro_det_val_acti_econo():
+
+    logger.info(f'usp_retro_det_val_acti_econo - inicio') 
+
+    try:
+        query_insert_1 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'EVAL - ACTIVIDAD ECONOCOMICA - INICIO', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_1, 'pg') 
+
+        query_insert_2 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'paso_inicio', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_2, 'pg') 
+
+        temp_tablas = [
+            "TMP_PLAFT_AC_1",
+            "TMP_PLAFT_AC_2",
+            "TMP_PLAFT_AC_3", 
+            "TMP_PLAFT_AC_4",
+            "TMP_PLAFT_AC_5",
+            "TMP_PLAFT_AC_01", 
+            "TMP_PLAFT_AC_02",
+            "TMP_PLAFT_AC_03",
+            "TMP_PLAFT_AC_01_1",
+            "TMP_PLAFT_AC_01_2"
+        ]
+
+        for tabla in temp_tablas:
+            execute_query_no_results(f"TRUNCATE TABLE interseguror.{tabla};",'pg')
+
+        query_insert_3 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'paso_01', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_3, 'pg') 
+
+        query_create_table_1 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_1
+            SELECT TR.COD_TIPO_DOCUMENTO_EVAL, TR.NUMERO_DOCUMENTO_EVAL, MAX(TR.FEC_INICIO_VIGENCIA) AS FEC_INICIO_VIGENCIA
+                            FROM(
+                                    SELECT T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL,
+                                                COUNT(DISTINCT coalesce(T.COD_ACTIVIDAD_ECONOMICA_EVAL,'-1')) AS CANTIDAD
+                                    FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL  T
+                                    WHERE  T.ACTIVO = 1
+                                        AND T.COD_TIPO_DOCUMENTO_EVAL = 'RUCJ'
+                                    GROUP BY T.COD_TIPO_DOCUMENTO_EVAL,T.NUMERO_DOCUMENTO_EVAL
+                                    HAVING COUNT(DISTINCT coalesce(T.COD_ACTIVIDAD_ECONOMICA_EVAL,'-1')) > 1
+                    ) TODOS
+                    INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL TR
+                        ON (TR.COD_TIPO_DOCUMENTO_EVAL =  TODOS.COD_TIPO_DOCUMENTO_EVAL AND
+                            TR.NUMERO_DOCUMENTO_EVAL = TODOS.NUMERO_DOCUMENTO_EVAL
+                            AND TR.FEC_INICIO_VIGENCIA IS NOT NULL
+                        )
+                    WHERE TR.COD_ACTIVIDAD_ECONOMICA_EVAL <> '-1'
+                    GROUP BY   TR.COD_TIPO_DOCUMENTO_EVAL,TR.NUMERO_DOCUMENTO_EVAL;
+        """
+        execute_query_no_results(query_create_table_1, 'pg')
+
+        query_insert_4 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'paso_02', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_4, 'pg') 
+
+        query_create_table_2 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_2
+            SELECT DISTINCT TT.COD_TIPO_DOCUMENTO_EVAL, TT.NUMERO_DOCUMENTO_EVAL, TT.COD_ACTIVIDAD_ECONOMICA_EVAL
+            FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL TT
+                INNER JOIN INTERSEGUROR.TMP_PLAFT_AC_1 TP
+                ON (TT.COD_TIPO_DOCUMENTO_EVAL = TP.COD_TIPO_DOCUMENTO_EVAL
+                            AND TT.NUMERO_DOCUMENTO_EVAL = TP.NUMERO_DOCUMENTO_EVAL
+                            AND TT.FEC_INICIO_VIGENCIA = TP.FEC_INICIO_VIGENCIA
+                    )
+            WHERE TT.COD_ACTIVIDAD_ECONOMICA_EVAL <> '-1';
+        """
+        execute_query_no_results(query_create_table_2, 'pg')
+
+        query_insert_5 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'paso_03', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_5, 'pg') 
+
+        query_create_table_3 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_3
+            SELECT DP.COD_TIPO_DOCUMENTO_EVAL, DP.NUMERO_DOCUMENTO_EVAL, E.CODIGO_EQUIVALENTE, COUNT(1) AS CANTIDAD
+            FROM   INTERSEGUROR.TMP_PLAFT_AC_2 DP
+                INNER JOIN INTERSEGUROR.PLAFT_EQUIVALENCIA E on DP.COD_ACTIVIDAD_ECONOMICA_EVAL = E.CODIGO_ORIGEN
+            GROUP  BY DP.COD_TIPO_DOCUMENTO_EVAL,DP.NUMERO_DOCUMENTO_EVAL,E.CODIGO_EQUIVALENTE
+            HAVING COUNT(1) > 1;
+        """
+        execute_query_no_results(query_create_table_3, 'pg')
+
+        query_insert_6 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'paso_04', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_6, 'pg') 
+
+        query_create_table_4 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_4
+            SELECT  T.COD_TIPO_DOCUMENTO_EVAL,T.NUMERO_DOCUMENTO_EVAL, MAX(T.COD_ACTIVIDAD_ECONOMICA_EVAL) AS COD_ACTIVIDAD_ECONOMICA_EVAL
+            FROM   INTERSEGUROR.TMP_PLAFT_AC_3 TA
+                INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL T ON (TA.COD_TIPO_DOCUMENTO_EVAL = T.COD_TIPO_DOCUMENTO_EVAL AND TA.NUMERO_DOCUMENTO_EVAL = T.NUMERO_DOCUMENTO_EVAL)
+            WHERE  T.ACTIVO = 1
+            GROUP BY T.COD_TIPO_DOCUMENTO_EVAL,T.NUMERO_DOCUMENTO_EVAL;
+        """
+        execute_query_no_results(query_create_table_4, 'pg')
+
+        query_update_table_1 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T set COD_ACTIVIDAD_ECONOMICA_EVAL = UP.COD_ACTIVIDAD_ECONOMICA_EVAL FROM(
+                SELECT * FROM INTERSEGUROR.TMP_PLAFT_AC_4 DP
+            ) UP where T.COD_TIPO_DOCUMENTO_EVAL = UP.COD_TIPO_DOCUMENTO_EVAL 
+            AND T.NUMERO_DOCUMENTO_EVAL = UP.NUMERO_DOCUMENTO_EVAL 
+            AND T.TIPO_CLIENTE = 'CONTRATANTE'
+            AND T.COD_TIPO_DOCUMENTO_EVAL = 'RUCJ'
+            AND T.ACTIVO = 1;
+        """
+        execute_query_no_results(query_update_table_1, 'pg')
+
+        query_create_table_5 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_5
+            SELECT DISTINCT TT.COD_TIPO_DOCUMENTO_EVAL, TT.NUMERO_DOCUMENTO_EVAL, TT.COD_ACTIVIDAD_ECONOMICA_EVAL
+            FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL TT
+                INNER JOIN INTERSEGUROR.TMP_PLAFT_AC_1 TP
+                ON (TT.COD_TIPO_DOCUMENTO_EVAL = TP.COD_TIPO_DOCUMENTO_EVAL
+                            AND TT.NUMERO_DOCUMENTO_EVAL = TP.NUMERO_DOCUMENTO_EVAL
+                            AND TT.FEC_INICIO_VIGENCIA = TP.FEC_INICIO_VIGENCIA
+                    )
+            WHERE TT.COD_ACTIVIDAD_ECONOMICA_EVAL <> '-1';
+        """
+        execute_query_no_results(query_create_table_5, 'pg')
+
+        query_insert_7 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'paso_05', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_7, 'pg') 
+
+        query_update_table_2 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T set COD_ACTIVIDAD_ECONOMICA_EVAL = UP.COD_ACTIVIDAD_ECONOMICA_EVAL FROM(
+                SELECT * FROM INTERSEGUROR.TMP_PLAFT_AC_5 DP
+            ) UP where T.COD_TIPO_DOCUMENTO_EVAL = UP.COD_TIPO_DOCUMENTO_EVAL 
+            AND T.NUMERO_DOCUMENTO_EVAL = UP.NUMERO_DOCUMENTO_EVAL 
+            AND T.TIPO_CLIENTE = 'CONTRATANTE'
+            AND T.COD_TIPO_DOCUMENTO_EVAL = 'RUCJ'
+            AND T.ACTIVO = 1;
+        """
+        execute_query_no_results(query_update_table_2, 'pg')
+
+        query_insert_8 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'INICIO OTROS DOCUMEMTOS', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_8, 'pg') 
+
+        query_create_table_6 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_01_1
+            SELECT T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL,
+                                        COUNT(DISTINCT T.COD_ACTIVIDAD_ECONOMICA_EVAL) AS CANTIDAD
+                                    FROM   INTERSEGUROR.PLAFT_TRANSACCIONAL  T
+                                    WHERE  T.ACTIVO = 1
+                                    GROUP BY T.COD_TIPO_DOCUMENTO_EVAL,T.NUMERO_DOCUMENTO_EVAL
+                                    HAVING COUNT(DISTINCT T.COD_ACTIVIDAD_ECONOMICA_EVAL) > 1;
+        """
+        execute_query_no_results(query_create_table_6, 'pg')
+
+        query_create_table_7 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_01_2
+            SELECT TR.COD_TIPO_DOCUMENTO_EVAL, TR.NUMERO_DOCUMENTO_EVAL, MAX(TR.FEC_INICIO_VIGENCIA) AS FEC_INICIO_VIGENCIA
+            FROM   INTERSEGUROR.TMP_PLAFT_AC_01_1 T
+            INNER JOIN INTERSEGUROR.PLAFT_TRANSACCIONAL TR
+            ON (TR.COD_TIPO_DOCUMENTO_EVAL =  T.COD_TIPO_DOCUMENTO_EVAL
+                AND TR.NUMERO_DOCUMENTO_EVAL = T.NUMERO_DOCUMENTO_EVAL
+                AND TR.FEC_INICIO_VIGENCIA IS NOT NULL
+                )
+            WHERE coalesce(TR.COD_ACTIVIDAD_ECONOMICA_EVAL,'-1') <> '-1'
+            GROUP BY   TR.COD_TIPO_DOCUMENTO_EVAL,TR.NUMERO_DOCUMENTO_EVAL;
+        """
+        execute_query_no_results(query_create_table_7, 'pg')
+
+        query_create_table_8 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_01
+            SELECT DISTINCT T3.NUMERO_DOCUMENTO_EVAL, T3.DEPARTAMENTO_EVAL, T3.COD_ACTIVIDAD_ECONOMICA_EVAL, T3.FEC_INICIO_VIGENCIA
+                FROM INTERSEGUROR.PLAFT_TRANSACCIONAL T3
+            INNER JOIN INTERSEGUROR.TMP_PLAFT_AC_01_2 T4 ON T3.NUMERO_DOCUMENTO_EVAL = T4.NUMERO_DOCUMENTO_EVAL
+            AND T3.FEC_INICIO_VIGENCIA = T4.FEC_INICIO_VIGENCIA
+            AND T3.COD_ACTIVIDAD_ECONOMICA_EVAL <> '-1';
+        """
+        execute_query_no_results(query_create_table_8, 'pg')
+
+        query_insert_9 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'OTROS DOCUMEMTOS-1', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_9, 'pg') 
+
+        query_create_table_9 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_02
+                SELECT  TT.NUMERO_DOCUMENTO_EVAL, TT.COD_ACTIVIDAD_ECONOMICA_EVAL,
+                ROW_NUMBER() OVER(PARTITION BY  TT.NUMERO_DOCUMENTO_EVAL  ORDER BY TT.NUMERO_DOCUMENTO_EVAL) AS NRO
+            FROM INTERSEGUROR.TMP_PLAFT_AC_01 TT;
+        """
+        execute_query_no_results(query_create_table_9, 'pg')
+
+        query_insert_10 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'OTROS DOCUMEMTOS-2', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_10, 'pg') 
+
+        query_create_table_10 = """
+            INSERT INTO INTERSEGUROR.TMP_PLAFT_AC_03
+            select * from INTERSEGUROR.TMP_PLAFT_AC_02 where NRO = 1;
+        """
+        execute_query_no_results(query_create_table_10, 'pg')
+
+        query_insert_11 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'OTROS DOCUMEMTOS-3', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_11, 'pg') 
+
+        query_update_table_3 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T set COD_ACTIVIDAD_ECONOMICA_EVAL = P.COD_ACTIVIDAD_ECONOMICA_EVAL FROM(
+                SELECT * FROM INTERSEGUROR.TMP_PLAFT_AC_03
+            ) P where T.NUMERO_DOCUMENTO_EVAL = P.NUMERO_DOCUMENTO_EVAL;
+        """
+        execute_query_no_results(query_update_table_3, 'pg')
+
+        query_insert_12 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'FIN OTROS DOCUMEMTOS', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_12, 'pg') 
+
+        query_insert_13 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'paso_fin', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_13, 'pg') 
+
+        query_update_table_4 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            set ID_ACTIVIDAD_ECONOMICA_EVAL = PP.CODIGO_EQUIVALENTE
+            FROM(SELECT * FROM   INTERSEGUROR.PLAFT_EQUIVALENCIA PE WHERE PE.TIPO = 'ACTIVIDAD ECONOMICA') PP
+            where T.COD_ACTIVIDAD_ECONOMICA_EVAL = PP.CODIGO_ORIGEN;
+        """
+        execute_query_no_results(query_update_table_4, 'pg')
+
+        query_insert_14 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'EVAL - ACTIVIDAD ECONOCOMICA - FIN', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_14, 'pg') 
+        
+    except Exception as e:
+        logger.error(f"Error en usp_retro_det_val_acti_econo: {str(e)}")
+        raise
+
+    logger.info(f'usp_retro_det_val_acti_econo - fin') 
+
+
+def usp_retro_calcular_periodo_temporal():
+
+    logger.info(f'usp_retro_calcular_periodo_temporal - inicio') 
+
+    try:
+        query_insert_1 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'-USP_RETRO_CALCULAR_PERIODO_TEMPORAL - INICIO', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_1, 'pg') 
+
+        query_update_table_1 = """
+            UPDATE INTERSEGUROR.PLAFT_TRANSACCIONAL T
+            SET    PERIODO_PAGO  = EXTRACT(year FROM T.FEC_FIN_VIGENCIA) -EXTRACT(year FROM T.FEC_INICIO_VIGENCIA)
+            WHERE  T.GLOSA_PRODUCTO = 'Temporal' AND T.PERIODO_PAGO >= 65
+            AND T.FEC_INICIO_VIGENCIA IS NOT NULL;
+        """
+        execute_query_no_results(query_update_table_1, 'pg')
+
+        query_insert_2 = f"""
+            insert into INTERSEGUROR.LOG_PLAFT_PROCESO_INTERNO  values(NEXTVAL('interseguror.seq_plaft_log_pro_int'),'-USP_RETRO_CALCULAR_PERIODO_TEMPORAL - FIN', '{ datetime.now() }');
+        """
+        execute_query_no_results(query_insert_2, 'pg')
+
+    except Exception as e:
+        logger.error(f"Error en usp_retro_calcular_periodo_temporal: {str(e)}")
+        raise
+
+    logger.info(f'usp_retro_calcular_periodo_temporal - fin') 
