@@ -1421,9 +1421,241 @@ def actualizar_riesgo_sbs():
 
 def excluir_polizas():
     logger.info('excluir_polizas - inicio')
-    res=execute_query_with_results("update INTERSEGUROR.PLAFT_TRANSACCIONAL set ID_RIESGO_SBS = '74' where ID_RIESGO_SBS is null and GLOSA_PRODUCTO = 'DesgTarjetasIndividual';",'pg')
+
+    temp_tablas = [
+        "PLAFT_POLIZAS_EXCLUIDOS",
+        "CONTRATANTES_REPETIDOS",
+        "ASEGURADOS_REPETIDOS",
+        "BENEFICIARIO_REPETIDOS", 
+        "PLAFT_TMP_POLIZAS_NO_VALIDAR" #ok
+    ]
+
+    for tabla in temp_tablas:
+        execute_query_no_results("TRUNCATE TABLE " + tabla + ";",'pg')
+    
+    # Insertar en PLAFT_TMP_POLIZAS_NO_VALIDAR_1
+    insert_plaft_tmp_pol_no_val_1 = """
+        INSERT INTO interseguror.PLAFT_TMP_POLIZAS_NO_VALIDAR (NUMERO_POLIZA)
+        SELECT DISTINCT t.NUMERO_POLIZA
+        FROM interseguror.plaft_transaccional t
+        WHERE t.reglas LIKE '%R050%';
+    """
+    execute_query_no_results(insert_plaft_tmp_pol_no_val_1, 'pg')
+
+    # Insertar en PLAFT_TMP_POLIZAS_NO_VALIDAR_2
+    insert_plaft_tmp_pol_no_val_2 = """
+        INSERT INTO interseguror.PLAFT_TMP_POLIZAS_NO_VALIDAR
+        SELECT DISTINCT numero_poliza
+        FROM (
+            SELECT t1.numero_poliza, COUNT(DISTINCT t1.departamento_eval) AS cantidad
+            FROM interseguror.PLAFT_TRANSACCIONAL t1
+            WHERE t1.numero_poliza NOT IN (
+                SELECT DISTINCT t1.numero_poliza 
+                FROM interseguror.PLAFT_TRANSACCIONAL t1
+                WHERE t1.tipo_cliente IN ('CONTRATANTE')
+            )
+            AND t1.tipo_cliente IN ('ASEGURADO')
+            AND t1.origen = 'EXCEL'
+            GROUP BY t1.numero_poliza
+            HAVING COUNT(DISTINCT t1.departamento_eval) > 1
+        ) AS subquery;
+    """
+    execute_query_no_results(insert_plaft_tmp_pol_no_val_2, 'pg')
+
+    # Insertar en PLAFT_TMP_POLIZAS_NO_VALIDAR_3
+    insert_plaft_tmp_pol_no_val_3 = """
+        INSERT INTO interseguror.PLAFT_TMP_POLIZAS_NO_VALIDAR
+        SELECT DISTINCT T.NUMERO_POLIZA
+        FROM interseguror.PLAFT_TRANSACCIONAL T
+        WHERE T.COD_RAMO = '4' AND T.COD_SUBRAMO = '01' AND T.COD_PRODUCTO = '01'
+        AND T.TIPO_CLIENTE = 'ASEGURADO';
+    """
+    execute_query_no_results(insert_plaft_tmp_pol_no_val_3, 'pg')
+
+    # Insertar en PLAFT_TMP_POLIZAS_NO_VALIDAR_4
+    insert_plaft_tmp_pol_no_val_4 = """
+        INSERT INTO interseguror.PLAFT_TMP_POLIZAS_NO_VALIDAR
+        SELECT DISTINCT numero_poliza
+        FROM (
+            SELECT t1.numero_poliza
+            FROM interseguror.PLAFT_TRANSACCIONAL t1
+            WHERE t1.numero_poliza IN ('00000000000000068041-50806E', '00000000000000001131-50803E')
+            AND t1.origen = 'EXCEL'
+        ) AS subquery;
+    """
+    execute_query_no_results(insert_plaft_tmp_pol_no_val_4, 'pg')
+
+    # Insertar en PLAFT_TMP_POLIZAS_NO_VALIDAR_5
+    insert_plaft_tmp_pol_no_val_5 = """
+        INSERT INTO interseguror.PLAFT_TMP_POLIZAS_NO_VALIDAR
+        SELECT DISTINCT T.NUMERO_POLIZA
+        FROM interseguror.PLAFT_TRANSACCIONAL T
+        WHERE T.COD_RAMO = '4'
+        AND T.COD_SUBRAMO = '01'
+        AND T.COD_PRODUCTO = '01'
+        AND T.TIPO_CLIENTE = 'ASEGURADO';
+    """
+    execute_query_no_results(insert_plaft_tmp_pol_no_val_5, 'pg')
+
+    insert_plaft_tmp_pol_exclu = """
+        CREATE TABLE interseguror.PLAFT_POLIZAS_EXCLUIDOS AS
+        SELECT DISTINCT T.NUMERO_POLIZA, 'TIPO DOCUMENTO NULO' AS OBSERVACION FROM interseguror.PLAFT_TRANSACCIONAL T
+        WHERE T.COD_TIPO_DOCUMENTO_EVAL IS NULL
+        UNION
+        SELECT DISTINCT T.NUMERO_POLIZA, 'NUMERO DOCUMENTO NULO Y NUMERO POLIZA NULO' AS OBSERVACION FROM interseguror.PLAFT_TRANSACCIONAL T
+        WHERE T.NUMERO_DOCUMENTO_EVAL IS NULL AND T.NUMERO_POLIZA IS NOT NULL
+        UNION
+        SELECT DISTINCT T.NUMERO_POLIZA, 'SIN DEPARTAMENTO' AS OBSERVACION FROM interseguror.PLAFT_TRANSACCIONAL T
+        WHERE T.DEPARTAMENTO_EVAL = 'NINGUNO'
+        UNION
+        SELECT DISTINCT T.NUMERO_POLIZA, 'SIN ACTIVIDAD ECONOMICA REGIMEN <> 1 Y PERSONA TIPO JURIDICO' AS OBSERVACION FROM interseguror.PLAFT_TRANSACCIONAL T
+        WHERE T.COD_ACTIVIDAD_ECONOMICA_EVAL = '-1' AND T.ID_REGIMEN_EVAL <> 1 AND T.TIPO_PERSONA = 'JURIDICO'
+        UNION
+        SELECT DISTINCT T.NUMERO_POLIZA, 'CLIENTES CON DIFERENTES TIPO DE DOCUMENTO(UNO ES RUC)' AS OBSERVACION
+        FROM interseguror.PLAFT_TRANSACCIONAL T
+        WHERE T.COD_TIPO_DOCUMENTO IN ('RUCJ', 'RUCN')
+        AND EXISTS (
+            SELECT 1 FROM interseguror.PLAFT_TRANSACCIONAL T2
+            WHERE T2.NUMERO_DOCUMENTO_EVAL = T.NUMERO_DOCUMENTO_EVAL
+            AND T2.ACTIVO = 1
+            GROUP BY T2.NUMERO_DOCUMENTO_EVAL
+            HAVING COUNT(DISTINCT T2.COD_TIPO_DOCUMENTO) > 1
+        )
+        UNION
+        SELECT DISTINCT T.NUMERO_POLIZA, 'AS400: POLIZAS SINIESTRADAS(CON BENEFICIARIO)' AS OBSERVACION FROM interseguror.PLAFT_TRANSACCIONAL T WHERE T.ORIGEN = 'AS400'
+        AND T.TIPO_CLIENTE = 'BENEFICIARIO'
+        UNION
+        SELECT DISTINCT NUMERO_POLIZA, 'EXCEL: CLIENTES DUPLICADOS POR POLIZA' AS OBSERVACION FROM (
+            SELECT T.NUMERO_POLIZA
+            FROM interseguror.PLAFT_TRANSACCIONAL T
+            WHERE T.ORIGEN = 'EXCEL'
+            GROUP BY T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL, T.TIPO_CLIENTE, T.NUMERO_POLIZA
+            HAVING COUNT(1) > 1
+        ) AS P
+        UNION
+        SELECT DISTINCT T.NUMERO_POLIZA, 'EXCEL: REGISTROS SIN REGIMEN' AS OBSERVACION FROM interseguror.PLAFT_TRANSACCIONAL T
+        WHERE T.ORIGEN = 'EXCEL' AND T.ID_REGIMEN_EVAL IS NULL
+        UNION
+        SELECT DISTINCT NUMERO_POLIZA, 'CLIENTES CON DIFERENTES DEPARTAMENTOS' AS OBSERVACION FROM (
+            SELECT T.NUMERO_POLIZA
+            FROM interseguror.PLAFT_TRANSACCIONAL T
+            WHERE T.ACTIVO = 1
+            AND T.NUMERO_POLIZA NOT IN (
+                SELECT NUMERO_POLIZA FROM interseguror.PLAFT_TMP_POLIZAS_NO_VALIDAR
+            )
+            GROUP BY T.COD_TIPO_DOCUMENTO_EVAL, T.NUMERO_DOCUMENTO_EVAL, T.NUMERO_POLIZA
+            HAVING COUNT(DISTINCT T.DEPARTAMENTO_EVAL) > 1
+        ) AS D
+        UNION
+        SELECT DISTINCT NUMERO_POLIZA, 'RENTAS:POLIZA CON BENEFICIARIOS Y MAS DE UN DEPARTAMENTO' AS OBSERVACION
+        FROM (
+            SELECT T1.NUMERO_POLIZA
+            FROM interseguror.PLAFT_TRANSACCIONAL T1
+            WHERE T1.NUMERO_POLIZA NOT IN (
+                SELECT NUMERO_POLIZA FROM interseguror.PLAFT_TRANSACCIONAL T1
+                WHERE T1.TIPO_CLIENTE IN ('CONTRATANTE', 'ASEGURADO')
+            )
+            AND T1.TIPO_CLIENTE IN('BENEFICIARIO')
+            GROUP BY T1.NUMERO_POLIZA
+            HAVING COUNT(DISTINCT T1.DEPARTAMENTO_EVAL) > 1
+        ) AS R
+        UNION
+        SELECT DISTINCT NUMERO_POLIZA, 'EXCEL:POLIZA CON ASEGURADOS Y MAS DE UN DEPARTAMENTO' AS OBSERVACION
+        FROM (
+            SELECT T1.NUMERO_POLIZA
+            FROM interseguror.PLAFT_TRANSACCIONAL T1
+            WHERE T1.NUMERO_POLIZA NOT IN (
+                SELECT NUMERO_POLIZA FROM interseguror.PLAFT_TRANSACCIONAL T1
+                WHERE T1.TIPO_CLIENTE IN ('CONTRATANTE')
+            )
+            AND T1.TIPO_CLIENTE IN('ASEGURADO')
+            GROUP BY T1.NUMERO_POLIZA
+            HAVING COUNT(DISTINCT T1.DEPARTAMENTO_EVAL) > 1
+        ) AS A;
+    """
+    execute_query_no_results(insert_plaft_tmp_pol_exclu, 'pg')
+
+    # Actualizar en plaft_transaccional
+    update_plaft_transaccional = """
+        WITH excluded_polizas AS (
+            SELECT DISTINCT P.NUMERO_POLIZA
+            FROM interseguror.PLAFT_POLIZAS_EXCLUIDOS P
+        )
+        UPDATE interseguror.PLAFT_TRANSACCIONAL TT
+        SET 
+            ACTIVO = 0,
+            REGLAS = TT.REGLAS || '-' || 'R026'
+        FROM excluded_polizas PP
+        WHERE PP.NUMERO_POLIZA = TT.NUMERO_POLIZA;
+    """
+    execute_query_no_results(update_plaft_transaccional, 'pg')
+
+    # Insertar en CONTRATANTES_REPETIDOS
+    insert_contratantes_repetidos = """
+        INSERT INTO interseguror.CONTRATANTES_REPETIDOS (cod_tipo_documento_eval, numero_documento_eval, numero_poliza, cantidad)
+        SELECT t.cod_tipo_documento_eval, t.numero_documento_eval, t.numero_poliza, COUNT(1) AS cantidad
+        FROM interseguror.plaft_transaccional t
+        WHERE t.tipo_cliente = 'CONTRATANTE'
+        GROUP BY t.cod_tipo_documento_eval, t.numero_documento_eval, t.numero_poliza
+        HAVING COUNT(1) > 1;
+    """
+    execute_query_no_results(insert_contratantes_repetidos, 'pg')
+
+    update_plaft_transaccional_2 = """
+        WITH CTE AS (
+            SELECT MIN(t.id_rep_general) as id_rep_general,
+                t.cod_tipo_documento_eval,
+                t.numero_documento_eval
+            FROM interseguror.plaft_transaccional t
+            INNER JOIN interseguror.CONTRATANTES_REPETIDOS cr ON t.cod_tipo_documento_eval = cr.cod_tipo_documento_eval
+                                                            AND t.numero_documento_eval = cr.numero_documento_eval
+                                                            AND t.numero_poliza = cr.numero_poliza
+            WHERE t.tipo_cliente = 'CONTRATANTE'
+            GROUP BY t.cod_tipo_documento_eval, t.numero_documento_eval
+        )
+        UPDATE interseguror.plaft_transaccional t
+        SET 
+            activo = 0,
+            reglas = t.reglas || '-' || 'R037'
+        FROM CTE
+        WHERE t.id_rep_general = CTE.id_rep_general;
+    """
+    execute_query_no_results(update_plaft_transaccional_2, 'pg')
+
+    #Insert beneficarios repetidos
+    insert_beneficiarios_repetidos = """
+        INSERT INTO interseguror.BENEFICIARIO_REPETIDOS (cod_tipo_documento_eval, numero_documento_eval, numero_poliza, cantidad)
+        SELECT t.cod_tipo_documento_eval, t.numero_documento_eval, t.numero_poliza, COUNT(*) AS cantidad
+        FROM interseguror.plaft_transaccional t
+        WHERE t.tipo_cliente = 'BENEFICIARIO'
+        GROUP BY t.cod_tipo_documento_eval, t.numero_documento_eval, t.numero_poliza
+        HAVING COUNT(*) > 1;
+    """
+    execute_query_no_results(insert_beneficiarios_repetidos, 'pg')
+
+    #Update plaft transaccional
+    update_plaft_transaccional_3 = """
+        WITH CTE AS (
+            SELECT MIN(t.id_rep_general) AS id_rep_general,
+                t.cod_tipo_documento_eval,
+                t.numero_documento_eval
+            FROM interseguror.plaft_transaccional t
+            INNER JOIN interseguror.BENEFICIARIO_REPETIDOS cr ON t.cod_tipo_documento_eval = cr.cod_tipo_documento_eval
+                                                            AND t.numero_documento_eval = cr.numero_documento_eval
+                                                            AND t.numero_poliza = cr.numero_poliza
+            WHERE t.tipo_cliente = 'BENEFICIARIO'
+            GROUP BY t.cod_tipo_documento_eval, t.numero_documento_eval
+        )
+        UPDATE interseguror.plaft_transaccional t
+        SET 
+            activo = 0,
+            reglas = t.reglas || '-' || 'R039'
+        FROM CTE
+        WHERE t.id_rep_general = CTE.id_rep_general;
+    """
+    execute_query_no_results(update_plaft_transaccional_3, 'pg')
+
     logger.info('excluir_polizas - fin')
-    return res
 
 def calcular_prima():
     logger.info('calcular_prima - inicio')
